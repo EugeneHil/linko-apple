@@ -21,15 +21,15 @@ jobs:
       - name: Fetch coturn
         run: git clone --depth 1 --branch $env:COTURN_TAG https://github.com/coturn/coturn.git coturn
       - name: Dependencies (vcpkg)
-        run: '& "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install "libevent[openssl,thread]" openssl pthreads --triplet x64-windows'
+        run: '& "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install "libevent[openssl,thread]" openssl pthreads --triplet x64-windows --x-install-root="$env:GITHUB_WORKSPACE\vcpkg_installed"'
       - name: Configure
-        run: cmake -S coturn -B build -A x64 -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows -DBUILD_TESTING=OFF
+        run: cmake -S coturn -B build -A x64 -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows -DVCPKG_INSTALLED_DIR="$env:GITHUB_WORKSPACE\vcpkg_installed" -DVCPKG_MANIFEST_MODE=OFF -DBUILD_TESTING=OFF
       - name: Build
         run: cmake --build build --config Release --parallel
       - name: Collect
         run: |
           New-Item -ItemType Directory dist | Out-Null
-          Get-ChildItem build -Recurse -Include turnserver.exe,turnutils_uclient.exe,*.dll | Copy-Item -Destination dist
+          Get-ChildItem build\bin\Release -Include turnserver.exe,turnutils_uclient.exe,*.dll -Recurse | Where-Object Name -notmatch 'd\.dll$|_d\.dll$' | Copy-Item -Destination dist
           Get-ChildItem dist
           Get-FileHash dist\turnserver.exe -Algorithm SHA256
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
