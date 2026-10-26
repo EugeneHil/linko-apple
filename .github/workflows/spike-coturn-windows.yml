@@ -23,7 +23,7 @@ jobs:
       - name: Dependencies (vcpkg)
         run: '& "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install "libevent[openssl,thread]" openssl pthreads libmicrohttpd sqlite3 --triplet x64-windows --x-install-root="$env:GITHUB_WORKSPACE\vcpkg_installed"'
       - name: Configure
-        run: cmake -S coturn -B build -A x64 -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows -DVCPKG_INSTALLED_DIR="$env:GITHUB_WORKSPACE\vcpkg_installed" -DVCPKG_MANIFEST_MODE=OFF -DBUILD_TESTING=OFF
+        run: cmake -S coturn -B build -A x64 -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT\scripts\buildsystems\vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows -DVCPKG_INSTALLED_DIR="$env:GITHUB_WORKSPACE\vcpkg_installed" -DVCPKG_MANIFEST_MODE=OFF -DCMAKE_DISABLE_FIND_PACKAGE_PostgreSQL=ON -DBUILD_TESTING=OFF
       - name: Build
         run: cmake --build build --config Release --parallel
       - name: Collect
