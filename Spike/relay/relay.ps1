@@ -25,7 +25,7 @@ while ($true) {
         $ctx = $accept.Result
         $accept = $listener.GetContextAsync()
         if (-not $ctx.Request.IsWebSocketRequest) { $ctx.Response.StatusCode = 400; $ctx.Response.Close(); continue }
-        $ws = $ctx.AcceptWebSocketAsync($null).GetAwaiter().GetResult().WebSocket
+        $ws = $ctx.AcceptWebSocketAsync([NullString]::Value).GetAwaiter().GetResult().WebSocket
         $c = @{ ws = $ws; buf = New-Object byte[] 262144; len = 0; task = $null }
         Receive $c
         [void]$clients.Add($c)
@@ -44,8 +44,9 @@ while ($true) {
     $c.len += $result.Count
     if ($result.EndOfMessage) {
         $message = New-Object 'System.ArraySegment[byte]' -ArgumentList $c.buf, 0, $c.len
-        $kind = [Text.Encoding]::UTF8.GetString($c.buf, 0, [Math]::Min($c.len, 30))
-        Write-Host "relay $kind..."
+        # Log only the message type: a raw prefix could expose SDP or TURN credentials (JSON key order is not fixed).
+        $kind = try { ([Text.Encoding]::UTF8.GetString($c.buf, 0, $c.len) | ConvertFrom-Json).type } catch { '?' }
+        Write-Host "relay $kind ($($c.len) bytes)"
         foreach ($other in @($clients)) {
             if ($other -ne $c) {
                 try { $other.ws.SendAsync($message, [System.Net.WebSockets.WebSocketMessageType]::Text, $true, $none).GetAwaiter().GetResult() } catch { }

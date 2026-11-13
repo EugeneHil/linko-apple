@@ -31,7 +31,7 @@ final class PeerSession: NSObject, ObservableObject {
 
     func note(_ line: String) {
         log.append(line)
-        if log.count > 12 { log.removeFirst() }
+        if log.count > 20 { log.removeFirst() }
     }
 
     func setMuted(_ muted: Bool) { localAudio?.isEnabled = !muted }
@@ -178,7 +178,15 @@ extension PeerSession: RTCPeerConnectionDelegate {
     nonisolated func peerConnection(_ pc: RTCPeerConnection, didAdd stream: RTCMediaStream) {}
     nonisolated func peerConnection(_ pc: RTCPeerConnection, didRemove stream: RTCMediaStream) {}
     nonisolated func peerConnectionShouldNegotiate(_ pc: RTCPeerConnection) {}
-    nonisolated func peerConnection(_ pc: RTCPeerConnection, didChange state: RTCIceGatheringState) {}
+    nonisolated func peerConnection(_ pc: RTCPeerConnection, didChange state: RTCIceGatheringState) {
+        let name = ["new", "gathering", "complete"][min(state.rawValue, 2)]
+        Task { @MainActor in self.note("gather \(name)") }
+    }
+
+    nonisolated func peerConnection(_ pc: RTCPeerConnection, didFailToGatherIceCandidate event: RTCIceCandidateErrorEvent) {
+        let line = "gather FAIL \(event.errorCode) \(event.errorText) url=\(event.url)"
+        Task { @MainActor in self.note(line) }
+    }
     nonisolated func peerConnection(_ pc: RTCPeerConnection, didRemove candidates: [RTCIceCandidate]) {}
 
     nonisolated func peerConnection(_ pc: RTCPeerConnection, didChange state: RTCIceConnectionState) {
@@ -189,7 +197,10 @@ extension PeerSession: RTCPeerConnectionDelegate {
     nonisolated func peerConnection(_ pc: RTCPeerConnection, didGenerate candidate: RTCIceCandidate) {
         let signal = Signal(type: "ice", candidate: candidate.sdp, sdpMid: candidate.sdpMid,
                             sdpMLineIndex: candidate.sdpMLineIndex)
-        Task { @MainActor in self.signaling.send(signal) }
+        let parts = candidate.sdp.split(separator: " ")
+        let proto = parts.count > 2 ? String(parts[2]) : "?"
+        let kind = parts.firstIndex(of: "typ").flatMap { parts.indices.contains($0 + 1) ? String(parts[$0 + 1]) : nil } ?? "?"
+        Task { @MainActor in self.note("cand \(proto) \(kind)"); self.signaling.send(signal) }
     }
 
     nonisolated func peerConnection(_ pc: RTCPeerConnection, didStartReceivingOn transceiver: RTCRtpTransceiver) {
@@ -285,12 +296,29 @@ struct SettingsForm: View {
         .autocorrectionDisabled()
     }
 
+    /// Spike only: the Mac forwards short-lived TURN credentials to the peer over signaling.
+    static func shareSignal() -> Signal {
+        let d = UserDefaults.standard
+        return Signal(type: "turn", turnURL: d.string(forKey: "turnURL"), turnUser: d.string(forKey: "turnUser"),
+                      turnCredential: d.string(forKey: "turnCredential"), relayOnly: d.bool(forKey: "relayOnly"))
+    }
+
+    static func store(_ signal: Signal) {
+        let d = UserDefaults.standard
+        d.set(signal.turnURL ?? "", forKey: "turnURL")
+        d.set(signal.turnUser ?? "", forKey: "turnUser")
+        d.set(signal.turnCredential ?? "", forKey: "turnCredential")
+        d.set(signal.relayOnly ?? false, forKey: "relayOnly")
+    }
+
     @MainActor
     static func apply(to session: PeerSession) -> URL? {
         let d = UserDefaults.standard
-        var servers = [RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])]
+        var servers: [RTCIceServer] = []
+        if !d.bool(forKey: "relayOnly") { servers.append(RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])) }
         if let url = d.string(forKey: "turnURL"), !url.isEmpty {
-            servers.append(RTCIceServer(urlStrings: [url, url + "?transport=tcp"],
+            let urls = url.contains("transport=") ? [url] : [url, url + "?transport=tcp"]
+            servers.append(RTCIceServer(urlStrings: urls,
                                         username: d.string(forKey: "turnUser"),
                                         credential: d.string(forKey: "turnCredential")))
         }

@@ -10,9 +10,12 @@ $conf = Join-Path $dir 'turnserver.conf'
 if (-not (Test-Path $conf)) {
     $bytes = New-Object byte[] 32
     [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
-    $secret = [Convert]::ToBase64String($bytes)
+    # Hex, not Base64: no look-alike characters (I/l, 0/O) and nothing for the config parser to trip on.
+    $secret = -join ($bytes | ForEach-Object { $_.ToString('x2') })
     @"
 listening-port=3478
+listening-ip=$PublicIp
+relay-ip=$PublicIp
 external-ip=$PublicIp
 min-port=49160
 max-port=49200
@@ -21,10 +24,8 @@ use-auth-secret
 static-auth-secret=$secret
 fingerprint
 no-tls
-no-dtls
 no-cli
 no-multicast-peers
-no-loopback-peers
 denied-peer-ip=10.0.0.0-10.255.255.255
 denied-peer-ip=172.16.0.0-172.31.255.255
 denied-peer-ip=192.168.0.0-192.168.255.255
@@ -52,7 +53,8 @@ foreach ($rule in @(
 
 $running = Get-Process turnserver -ErrorAction SilentlyContinue
 if ($running) { Write-Host "turnserver already running (pid $($running.Id))"; exit 0 }
-Start-Process -FilePath (Join-Path $dir 'turnserver.exe') -ArgumentList '-c', $conf -WorkingDirectory $dir -WindowStyle Hidden
+# coturn on Windows does not resolve a drive-letter absolute path for -c; a name relative to the working directory works.
+Start-Process -FilePath (Join-Path $dir 'turnserver.exe') -ArgumentList '-c', 'turnserver.conf' -WorkingDirectory $dir -WindowStyle Hidden
 Start-Sleep -Seconds 2
 $p = Get-Process turnserver -ErrorAction SilentlyContinue
 if ($p) { Write-Host "turnserver started (pid $($p.Id))" } else { Write-Host 'turnserver did not start; see turn.log'; exit 1 }

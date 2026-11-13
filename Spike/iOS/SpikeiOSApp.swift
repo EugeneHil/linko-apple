@@ -56,7 +56,14 @@ final class CallController: NSObject, ObservableObject {
     }
 
     private func handle(_ signal: Signal) {
+        if signal.type == "turn" {
+            SettingsForm.store(signal)
+            _ = SettingsForm.apply(to: session)
+            session.note("TURN settings received (relayOnly \(signal.relayOnly ?? false))")
+            return
+        }
         if signal.type == "call" {
+            _ = SettingsForm.apply(to: session)
             let uuid = UUID()
             currentCall = uuid
             let update = CXCallUpdate()
@@ -83,7 +90,7 @@ final class CallController: NSObject, ObservableObject {
         let config = RTCAudioSessionConfiguration.webRTC()
         config.category = AVAudioSession.Category.playAndRecord.rawValue
         config.mode = AVAudioSession.Mode.videoChat.rawValue
-        config.categoryOptions = [.allowBluetooth, .allowBluetoothA2DP, .defaultToSpeaker]
+        config.categoryOptions = [.allowBluetoothHFP, .allowBluetoothA2DP, .defaultToSpeaker]
         do { try rtcAudio.setConfiguration(config) } catch { session.note("audio config: \(error)") }
         rtcAudio.unlockForConfiguration()
     }
@@ -139,7 +146,7 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(session.status).font(.headline)
                 Text(session.stats).font(.caption.monospaced())
-                ForEach(Array(session.log.enumerated()), id: \.offset) { Text($0.element).font(.caption2) }
+                ForEach(Array(session.log.enumerated()), id: \.offset) { Text($0.element).font(.caption2).fixedSize(horizontal: false, vertical: true) }
                 SettingsForm()
                 HStack {
                     Button("Connect") { call.connect() }.buttonStyle(.borderedProminent)

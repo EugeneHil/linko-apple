@@ -2,11 +2,15 @@ import Foundation
 
 /// Throwaway signaling message, relayed verbatim to the other peer.
 struct Signal: Codable {
-    var type: String // call | accept | offer | answer | ice | hangup
+    var type: String // call | accept | offer | answer | ice | hangup | turn
     var sdp: String?
     var candidate: String?
     var sdpMid: String?
     var sdpMLineIndex: Int32?
+    var turnURL: String?
+    var turnUser: String?
+    var turnCredential: String?
+    var relayOnly: Bool?
 }
 
 @MainActor

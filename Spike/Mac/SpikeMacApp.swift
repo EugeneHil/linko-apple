@@ -29,7 +29,10 @@ struct MacView: View {
                         .buttonStyle(.borderedProminent)
                     Button("Hang up", role: .destructive) { session.hangup() }
                 }
-                ForEach(Array(session.log.enumerated()), id: \.offset) { Text($0.element).font(.caption2) }
+                HStack {
+                    Button("Send TURN to peer") { session.signaling.send(SettingsForm.shareSignal()); session.note("TURN settings sent") }
+                }
+                ForEach(Array(session.log.enumerated()), id: \.offset) { Text($0.element).font(.caption2).fixedSize(horizontal: false, vertical: true) }
                 Spacer()
             }
             .padding()
@@ -41,7 +44,7 @@ struct MacView: View {
         session.signaling.onState = { [weak session] in session?.note($0) }
         session.signaling.onSignal = { [weak session] signal in
             guard let session else { return }
-            if signal.type == "accept" { session.start(isCaller: true) } else { session.handle(signal) }
+            if signal.type == "accept" { _ = SettingsForm.apply(to: session); session.start(isCaller: true) } else { session.handle(signal) }
         }
         if let url = SettingsForm.apply(to: session) { session.signaling.connect(url) }
     }
