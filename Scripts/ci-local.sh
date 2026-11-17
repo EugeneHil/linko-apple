@@ -49,6 +49,12 @@ mise exec -- tuist test DesignSystemTests -- -destination "id=$ios_udid"
 echo "== DesignSystem tests on macOS"
 mise exec -- tuist test DesignSystemMacTests -- -destination "platform=macOS"
 
+echo "== Messaging tests on the iOS simulator ($ios_udid)"
+mise exec -- tuist test MessagingTests -- -destination "id=$ios_udid"
+
+echo "== Messaging tests on macOS"
+mise exec -- tuist test MessagingMacTests -- -destination "platform=macOS"
+
 echo "== Signaling tests on the iOS simulator ($ios_udid)"
 mise exec -- tuist test SignalingTests -- -destination "id=$ios_udid"
 

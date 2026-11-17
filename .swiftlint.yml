@@ -14,3 +14,14 @@ excluded:
 line_length:
   warning: 160
   error: 200
+identifier_name:
+  # Plan-pinned wire/domain names and conventional shorthands below the
+  # default 3-character minimum (id is already excluded by default).
+  excluded:
+    - id
+    - db
+    - to
+    - ts
+    - a
+    - b
+    - up
