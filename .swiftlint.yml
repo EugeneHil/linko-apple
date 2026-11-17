@@ -1,0 +1,11 @@
+# SwiftLint configuration; strictness comes from the --strict flag in
+# Scripts/ci-local.sh (any warning fails the run).
+included:
+  - Apps
+  - Modules
+excluded:
+  - Derived
+  - Spike
+line_length:
+  warning: 160
+  error: 200

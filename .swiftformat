@@ -1,0 +1,5 @@
+# SwiftFormat configuration; Scripts/ci-local.sh runs `swiftformat --lint`.
+# Tuist manifests and generated content are excluded from formatting.
+--swiftversion 6.0
+--maxwidth 160
+--exclude Derived,Spike,Tuist,Workspace.swift,Project.swift
