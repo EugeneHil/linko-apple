@@ -190,6 +190,46 @@ private let signalingMacTests = Target.target(
     settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
 )
 
+// Pure-Swift module (Plan 4 Task 5): the pinned HTTP client, invite links,
+// registration, users search, TURN credentials and the Keychain token store.
+// TLS trust decisions come from Signaling's SPKIPinValidator, which the
+// PinnedHTTPClient wires as its URLSession delegate.
+private let serverAPI = Target.target(
+    name: "ServerAPI",
+    destinations: [.iPhone, .mac],
+    product: .framework,
+    bundleId: "io.github.eugenehil.linko.ServerAPI",
+    deploymentTargets: .multiplatform(iOS: "18.0", macOS: "15.0"),
+    infoPlist: .default,
+    sources: ["Modules/ServerAPI/Sources/**"],
+    dependencies: [.target(name: "Signaling")],
+    settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
+)
+
+private let serverAPITests = Target.target(
+    name: "ServerAPITests",
+    destinations: [.iPhone],
+    product: .unitTests,
+    bundleId: "io.github.eugenehil.linko.ServerAPITests",
+    deploymentTargets: .iOS("18.0"),
+    infoPlist: .default,
+    sources: ["Modules/ServerAPI/Tests/**"],
+    dependencies: [.target(name: "ServerAPI")],
+    settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
+)
+
+private let serverAPIMacTests = Target.target(
+    name: "ServerAPIMacTests",
+    destinations: [.mac],
+    product: .unitTests,
+    bundleId: "io.github.eugenehil.linko.ServerAPIMacTests",
+    deploymentTargets: .macOS("15.0"),
+    infoPlist: .default,
+    sources: ["Modules/ServerAPI/Tests/**"],
+    dependencies: [.target(name: "ServerAPI")],
+    settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
+)
+
 let project = Project(
     name: "Linko",
     targets: [
@@ -204,6 +244,9 @@ let project = Project(
         signaling,
         signalingTests,
         signalingMacTests,
+        serverAPI,
+        serverAPITests,
+        serverAPIMacTests,
     ],
     schemes: [
         // One scheme per CoreBridge test target so both platforms can be
@@ -239,6 +282,17 @@ let project = Project(
             name: "SignalingMacTests",
             buildAction: .buildAction(targets: ["SignalingMacTests"]),
             testAction: .targets(["SignalingMacTests"])
+        ),
+        // Same pattern for the ServerAPI test targets (Task 5).
+        .scheme(
+            name: "ServerAPITests",
+            buildAction: .buildAction(targets: ["ServerAPITests"]),
+            testAction: .targets(["ServerAPITests"])
+        ),
+        .scheme(
+            name: "ServerAPIMacTests",
+            buildAction: .buildAction(targets: ["ServerAPIMacTests"]),
+            testAction: .targets(["ServerAPIMacTests"])
         ),
     ]
 )
