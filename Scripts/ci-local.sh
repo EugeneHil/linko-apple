@@ -55,4 +55,10 @@ mise exec -- tuist test SignalingTests -- -destination "id=$ios_udid"
 echo "== Signaling tests on macOS"
 mise exec -- tuist test SignalingMacTests -- -destination "platform=macOS"
 
+echo "== ServerAPI tests on the iOS simulator ($ios_udid)"
+mise exec -- tuist test ServerAPITests -- -destination "id=$ios_udid"
+
+echo "== ServerAPI tests on macOS"
+mise exec -- tuist test ServerAPIMacTests -- -destination "platform=macOS"
+
 echo "ci-local: OK"
