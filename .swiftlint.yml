@@ -6,6 +6,11 @@ included:
 excluded:
   - Derived
   - Spike
+  # Generated content (Plan 4 Task 3): the committed Tokens.swift is byte-fixed
+  # by external/linko-core/design-tokens/generate.py and cannot satisfy
+  # identifier_name (s4/s8) or nesting (Tokens.Colors.Light); freshness is
+  # enforced by Scripts/check-tokens.sh instead.
+  - Modules/DesignSystem/Sources/Tokens.swift
 line_length:
   warning: 160
   error: 200
