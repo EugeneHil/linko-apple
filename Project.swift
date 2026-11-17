@@ -276,6 +276,57 @@ private let serverAPIMacTests = Target.target(
     settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
 )
 
+// Pure-Swift module (Plan 4 Task 7): the WebRTC wrapper behind the
+// CallMediaEngine protocol. Consumes stasel/WebRTC 155.0.0 (ADR-0004) and
+// ServerAPI's TurnCredentials for RTCIceServer construction. Every WebRTC
+// delegate callback is wrapped exactly once into an AsyncStream behind the
+// EnginePeerConnection seam, so tests inject fakes and never touch live
+// WebRTC objects.
+private let callEngine = Target.target(
+    name: "CallEngine",
+    destinations: [.iPhone, .mac],
+    product: .framework,
+    bundleId: "io.github.eugenehil.linko.CallEngine",
+    deploymentTargets: .multiplatform(iOS: "18.0", macOS: "15.0"),
+    infoPlist: .default,
+    sources: ["Modules/CallEngine/Sources/**"],
+    dependencies: [
+        .target(name: "ServerAPI"),
+        .external(name: "WebRTC"),
+    ],
+    settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
+)
+
+private let callEngineTests = Target.target(
+    name: "CallEngineTests",
+    destinations: [.iPhone],
+    product: .unitTests,
+    bundleId: "io.github.eugenehil.linko.CallEngineTests",
+    deploymentTargets: .iOS("18.0"),
+    infoPlist: .default,
+    sources: ["Modules/CallEngine/Tests/**"],
+    dependencies: [
+        .target(name: "CallEngine"),
+        .external(name: "WebRTC"),
+    ],
+    settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
+)
+
+private let callEngineMacTests = Target.target(
+    name: "CallEngineMacTests",
+    destinations: [.mac],
+    product: .unitTests,
+    bundleId: "io.github.eugenehil.linko.CallEngineMacTests",
+    deploymentTargets: .macOS("15.0"),
+    infoPlist: .default,
+    sources: ["Modules/CallEngine/Tests/**"],
+    dependencies: [
+        .target(name: "CallEngine"),
+        .external(name: "WebRTC"),
+    ],
+    settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
+)
+
 let project = Project(
     name: "Linko",
     targets: [
@@ -296,6 +347,9 @@ let project = Project(
         serverAPI,
         serverAPITests,
         serverAPIMacTests,
+        callEngine,
+        callEngineTests,
+        callEngineMacTests,
     ],
     schemes: [
         // One scheme per CoreBridge test target so both platforms can be
@@ -353,6 +407,17 @@ let project = Project(
             name: "ServerAPIMacTests",
             buildAction: .buildAction(targets: ["ServerAPIMacTests"]),
             testAction: .targets(["ServerAPIMacTests"])
+        ),
+        // Same pattern for the CallEngine test targets (Task 7).
+        .scheme(
+            name: "CallEngineTests",
+            buildAction: .buildAction(targets: ["CallEngineTests"]),
+            testAction: .targets(["CallEngineTests"])
+        ),
+        .scheme(
+            name: "CallEngineMacTests",
+            buildAction: .buildAction(targets: ["CallEngineMacTests"]),
+            testAction: .targets(["CallEngineMacTests"])
         ),
     ]
 )

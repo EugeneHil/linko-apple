@@ -10,6 +10,13 @@ public struct TurnCredentials: Equatable, Sendable {
     public let credential: String
     public let ttlSec: Int
     public let urls: [String]
+
+    public init(username: String, credential: String, ttlSec: Int, urls: [String]) {
+        self.username = username
+        self.credential = credential
+        self.ttlSec = ttlSec
+        self.urls = urls
+    }
 }
 
 public struct TurnClient: Sendable {
