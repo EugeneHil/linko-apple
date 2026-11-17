@@ -31,7 +31,8 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 /// Protocol v1 envelope (spec 4.2) wrapping linko::Envelope. body stays raw
-/// JSON in canonical form; typed per-family accessors come in later tasks.
+/// JSON in canonical form; the typed per-family accessors in LKMessages.h
+/// produce and consume it.
 @interface LKEnvelope : NSObject
 @property (nonatomic, readonly) NSInteger v;
 @property (nonatomic, readonly, copy) NSString *type;
@@ -42,6 +43,19 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, readonly, copy) NSString *bodyJSON;
 /// The full envelope re-serialized to wire format by the core.
 @property (nonatomic, readonly, copy) NSString *wireJSON;
+
+/// Builds an envelope from its fields; bodyJSON is the raw JSON of the body
+/// member (the typed body accessors' bodyJSON values are canonical).
+/// Together with wireJSON this is how outgoing envelopes are built on the
+/// Swift side; a bodyJSON that is not valid JSON yields an empty wireJSON.
+- (instancetype)initWithV:(NSInteger)v
+                     type:(NSString *)type
+                       id:(NSString *)identifier
+                       ts:(int64_t)ts
+                 bodyJSON:(NSString *)bodyJSON NS_DESIGNATED_INITIALIZER;
+
+- (instancetype)init NS_UNAVAILABLE;
++ (instancetype)new NS_UNAVAILABLE;
 
 /// Parses wire-format JSON through the core (size, strict UTF-8 and nesting
 /// checks happen before any JSON parsing). Never throws: a parse failure
