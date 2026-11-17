@@ -71,6 +71,14 @@ public final class CallCoordinator {
     public let callState: AsyncStream<CallState>
     let callStateContinuation: AsyncStream<CallState>.Continuation
 
+    /// The UI-facing statistics stream (LNK-39, Task 13 part 1): one derived
+    /// sample per poll tick while a session is active, newest-wins buffering
+    /// so a slow UI consumer never accumulates backlog. The stream lives as
+    /// long as the coordinator — samples stop between calls, the stream
+    /// never ends.
+    public let stats: AsyncStream<CallStatsSample>
+    let statsContinuation: AsyncStream<CallStatsSample>.Continuation
+
     /// The machine's current call state, readable without consuming the stream.
     public private(set) var currentState: CallState = .idle
 
@@ -116,6 +124,7 @@ public final class CallCoordinator {
         self.nowMs = nowMs
         self.clock = clock ?? SystemCallClock()
         (callState, callStateContinuation) = AsyncStream.makeStream(of: CallState.self, bufferingPolicy: .unbounded)
+        (stats, statsContinuation) = AsyncStream.makeStream(of: CallStatsSample.self, bufferingPolicy: .bufferingNewest(1))
     }
 
     /// Starts the consuming loops (signaling events, incoming calls, engine
@@ -308,7 +317,11 @@ public final class CallCoordinator {
 
     func startStatsCollection() {
         let puller = StatisticsPuller(stream: engine.statistics)
-        let poller = StatsPoller(nextReport: { await puller.pull() }, statsInterval: statsInterval)
+        let poller = StatsPoller(
+            nextReport: { await puller.pull() },
+            statsInterval: statsInterval,
+            onSample: { [statsContinuation] in statsContinuation.yield($0) }
+        )
         self.poller = poller
         Task { await poller.start() }
     }
