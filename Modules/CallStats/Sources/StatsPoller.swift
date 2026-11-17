@@ -13,16 +13,26 @@ public actor StatsPoller {
     /// cancellation); tests hand canned reports back.
     public typealias ReportReading = @Sendable () async -> RawStatsReport?
 
+    /// Observes each derived sample the moment it lands (the coordinator's
+    /// UI-facing stats stream, Task 13); nil keeps the poller silent.
+    public typealias SampleHandling = @Sendable (CallStatsSample) -> Void
+
     private let nextReport: ReportReading
     private let statsInterval: Duration
+    private let onSample: SampleHandling?
     private let deriver = StatsDeriver()
     private var previous: RawStatsReport?
     private var collected: [CallStatsSample] = []
     private var task: Task<Void, Never>?
 
-    public init(nextReport: @escaping ReportReading, statsInterval: Duration = .seconds(1)) {
+    public init(
+        nextReport: @escaping ReportReading,
+        statsInterval: Duration = .seconds(1),
+        onSample: SampleHandling? = nil
+    ) {
         self.nextReport = nextReport
         self.statsInterval = statsInterval
+        self.onSample = onSample
     }
 
     /// The samples derived so far — the coordinator folds them into the
@@ -57,6 +67,7 @@ public actor StatsPoller {
         guard !Task.isCancelled, let report else { return }
         if let sample = deriver.derive(previous: previous, current: report) {
             collected.append(sample)
+            onSample?(sample)
         }
         previous = report
     }

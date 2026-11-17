@@ -115,4 +115,11 @@ mise exec -- tuist test SettingsTests -- -destination "id=$ios_udid"
 echo "== Settings tests on macOS"
 mise exec -- tuist test SettingsMacTests -- -destination "platform=macOS"
 
+# Task 13 part 1 (LNK-39): the Call feature module.
+echo "== Call tests on the iOS simulator ($ios_udid)"
+mise exec -- tuist test CallTests -- -destination "id=$ios_udid"
+
+echo "== Call tests on macOS"
+mise exec -- tuist test CallMacTests -- -destination "platform=macOS"
+
 echo "ci-local: OK"

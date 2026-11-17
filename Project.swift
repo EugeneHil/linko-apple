@@ -577,6 +577,24 @@ private let settings = featureTarget(
     settings: featuresSettings
 )
 
+// The call feature (Plan 4 Task 13 part 1, LNK-39): the call screen's view
+// model, the StatsOverlay binding and the macOS IncomingCallView. Consumes
+// Calls (the coordinator's UI-facing streams), CallStats (the derived
+// sample), ServerAPI (the defaults seam) and DesignSystem (StatsOverlay,
+// CallControlsTray) — explicit modules are disabled: the Calls target
+// imports Signaling, so the first-consumer build-order lesson (LNK-32) one
+// hop further applies here too.
+private let call = featureTarget(
+    name: "Call",
+    dependencies: [
+        .target(name: "Calls"),
+        .target(name: "CallStats"),
+        .target(name: "ServerAPI"),
+        .target(name: "DesignSystem"),
+    ],
+    settings: featuresSettings
+)
+
 private let onboardingTests = featureTestsTarget(
     name: "Onboarding",
     destinations: [.iPhone],
@@ -639,6 +657,38 @@ private let settingsMacTests = featureTestsTarget(
     ]
 )
 
+// The call feature's test targets (Task 13 part 1): every imported module
+// is declared explicitly (LNK-34's cold-build lesson) — the fakes drive
+// Calls' coordinator over CallEngine/CallStats/CoreBridge/Signaling seams,
+// the defaults assertions read ServerAPI and pin the key against Settings.
+private let callTests = featureTestsTarget(
+    name: "Call",
+    destinations: [.iPhone],
+    dependencies: [
+        .target(name: "Calls"),
+        .target(name: "CallEngine"),
+        .target(name: "CallStats"),
+        .target(name: "CoreBridge"),
+        .target(name: "Signaling"),
+        .target(name: "ServerAPI"),
+        .target(name: "Settings"),
+    ]
+)
+
+private let callMacTests = featureTestsTarget(
+    name: "Call",
+    destinations: [.mac],
+    dependencies: [
+        .target(name: "Calls"),
+        .target(name: "CallEngine"),
+        .target(name: "CallStats"),
+        .target(name: "CoreBridge"),
+        .target(name: "Signaling"),
+        .target(name: "ServerAPI"),
+        .target(name: "Settings"),
+    ]
+)
+
 let project = Project(
     name: "Linko",
     targets: [
@@ -675,6 +725,7 @@ let project = Project(
         chats,
         conversation,
         settings,
+        call,
         onboardingTests,
         onboardingMacTests,
         chatsTests,
@@ -683,6 +734,8 @@ let project = Project(
         conversationMacTests,
         settingsTests,
         settingsMacTests,
+        callTests,
+        callMacTests,
     ],
     schemes: [
         // One scheme per CoreBridge test target so both platforms can be
@@ -825,6 +878,17 @@ let project = Project(
             name: "SettingsMacTests",
             buildAction: .buildAction(targets: ["SettingsMacTests"]),
             testAction: .targets(["SettingsMacTests"])
+        ),
+        // Same pattern for the Call feature test targets (Task 13 part 1).
+        .scheme(
+            name: "CallTests",
+            buildAction: .buildAction(targets: ["CallTests"]),
+            testAction: .targets(["CallTests"])
+        ),
+        .scheme(
+            name: "CallMacTests",
+            buildAction: .buildAction(targets: ["CallMacTests"]),
+            testAction: .targets(["CallMacTests"])
         ),
     ]
 )
