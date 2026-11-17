@@ -54,6 +54,11 @@ private let coreBridge = Target.target(
         public: [
             "Modules/CoreBridge/Sources/CoreBridge.h",
             "Modules/CoreBridge/Sources/LKEnvelope.h",
+            "Modules/CoreBridge/Sources/LKTypes.h",
+            "Modules/CoreBridge/Sources/LKFileTransfer.h",
+            "Modules/CoreBridge/Sources/LKMessages.h",
+            "Modules/CoreBridge/Sources/LKConversationHistory.h",
+            "Modules/CoreBridge/Sources/LKCallStateMachine.h",
         ]
     ),
     scripts: [

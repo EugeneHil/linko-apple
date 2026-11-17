@@ -39,6 +39,7 @@ static NSString *NSStringFromStdString(const std::string &value) {
 @property(nonatomic, copy, readwrite) NSString *type;
 @property(nonatomic, copy, readwrite) NSString *identifier;
 @property(nonatomic, copy, readwrite) NSString *bodyJSON;
+- (instancetype)initWithV:(NSInteger)v type:(NSString *)type id:(NSString *)identifier ts:(int64_t)ts bodyJSON:(NSString *)bodyJSON;
 @end
 
 @implementation LKValidationError
