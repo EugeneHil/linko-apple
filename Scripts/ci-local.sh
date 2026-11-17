@@ -23,7 +23,7 @@ echo "== Design tokens freshness"
 Scripts/check-tokens.sh
 
 echo "== tuist generate"
-mise exec -- tuist generate
+mise exec -- tuist generate --no-open
 
 ios_udid=${IOS_SIMULATOR_UDID:-}
 if [ -z "$ios_udid" ]; then
@@ -78,6 +78,12 @@ mise exec -- tuist test CallStatsTests -- -destination "id=$ios_udid"
 
 echo "== CallStats tests on macOS"
 mise exec -- tuist test CallStatsMacTests -- -destination "platform=macOS"
+
+echo "== Calls tests on the iOS simulator ($ios_udid)"
+mise exec -- tuist test CallsTests -- -destination "id=$ios_udid"
+
+echo "== Calls tests on macOS"
+mise exec -- tuist test CallsMacTests -- -destination "platform=macOS"
 
 echo "== FileTransfer tests on the iOS simulator ($ios_udid)"
 mise exec -- tuist test FileTransferTests -- -destination "id=$ios_udid"

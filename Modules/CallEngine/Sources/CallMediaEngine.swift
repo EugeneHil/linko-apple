@@ -22,6 +22,12 @@ public protocol CallMediaEngine: Sendable {
     /// Creates the answer to the remote offer; returns the answer SDP string.
     func accept() async throws -> String
 
+    /// Rebuilds the session with an ICE-restart offer and applies it as the
+    /// local description; returns the offer SDP string for the coordinator to
+    /// ship to the peer as call.offer (the StartIceRestart effect's surface,
+    /// Plan 4 Task 9).
+    func restartIce() async throws -> String
+
     /// Applies the remote session description (offer before accept, answer
     /// after startCall).
     func setRemoteSDP(_ sdp: String, isAnswer: Bool) async throws

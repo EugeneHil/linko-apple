@@ -254,4 +254,39 @@ final class DefaultCallEngineTests: XCTestCase {
             return track != nil
         }
     }
+
+    // MARK: ICE restart (Plan 4 Task 9: the StartIceRestart effect's engine
+
+    // surface — an offer that asks WebRTC to restart ICE, applied locally so
+    // the coordinator can ship it to the peer as call.offer. Whether WebRTC
+    // honors the legacy constraint is device-e2e territory, per ADR-0001.)
+
+    func test_restart_ice_makes_ice_restart_offer() async throws {
+        let fixture = try await makeEngineFixture(media: .audio)
+
+        // The restart trigger is the pinned legacy constraint pair.
+        XCTAssertEqual(
+            DefaultCallEngine.restartIceMandatory,
+            [kRTCMediaConstraintsIceRestart: kRTCMediaConstraintsValueTrue]
+        )
+
+        let offer = try await fixture.engine.restartIce()
+
+        XCTAssertEqual(offer, "offer-sdp")
+        XCTAssertEqual(fixture.connection.offerCount, 1)
+        // The offer is applied as the local description (the remote answers
+        // it through the coordinator's call.offer / call.answer plumbing).
+        let local = try XCTUnwrap(fixture.connection.localDescriptions.last)
+        XCTAssertEqual(local.sdp, "offer-sdp")
+        XCTAssertFalse(local.isAnswer)
+
+        // Without a prepared engine the restart fails instead of no-oping.
+        let fresh = DefaultCallEngine(credentials: sampleCredentials)
+        do {
+            _ = try await fresh.restartIce()
+            XCTFail("restart without prepare must throw")
+        } catch let error as CallEngineError {
+            XCTAssertEqual(error, .notPrepared)
+        }
+    }
 }
