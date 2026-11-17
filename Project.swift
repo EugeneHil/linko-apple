@@ -152,6 +152,44 @@ private let designSystemMacTests = Target.target(
     settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
 )
 
+// Pure-Swift module (Plan 4 Task 4): the WSS client, SPKI pinning, heartbeat
+// and backoff reconnect — consumes CoreBridge envelopes and CryptoKit only.
+private let signaling = Target.target(
+    name: "Signaling",
+    destinations: [.iPhone, .mac],
+    product: .framework,
+    bundleId: "io.github.eugenehil.linko.Signaling",
+    deploymentTargets: .multiplatform(iOS: "18.0", macOS: "15.0"),
+    infoPlist: .default,
+    sources: ["Modules/Signaling/Sources/**"],
+    dependencies: [.target(name: "CoreBridge")],
+    settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
+)
+
+private let signalingTests = Target.target(
+    name: "SignalingTests",
+    destinations: [.iPhone],
+    product: .unitTests,
+    bundleId: "io.github.eugenehil.linko.SignalingTests",
+    deploymentTargets: .iOS("18.0"),
+    infoPlist: .default,
+    sources: ["Modules/Signaling/Tests/**"],
+    dependencies: [.target(name: "Signaling"), .target(name: "CoreBridge")],
+    settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
+)
+
+private let signalingMacTests = Target.target(
+    name: "SignalingMacTests",
+    destinations: [.mac],
+    product: .unitTests,
+    bundleId: "io.github.eugenehil.linko.SignalingMacTests",
+    deploymentTargets: .macOS("15.0"),
+    infoPlist: .default,
+    sources: ["Modules/Signaling/Tests/**"],
+    dependencies: [.target(name: "Signaling"), .target(name: "CoreBridge")],
+    settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
+)
+
 let project = Project(
     name: "Linko",
     targets: [
@@ -163,6 +201,9 @@ let project = Project(
         designSystem,
         designSystemTests,
         designSystemMacTests,
+        signaling,
+        signalingTests,
+        signalingMacTests,
     ],
     schemes: [
         // One scheme per CoreBridge test target so both platforms can be
@@ -187,6 +228,17 @@ let project = Project(
             name: "DesignSystemMacTests",
             buildAction: .buildAction(targets: ["DesignSystemMacTests"]),
             testAction: .targets(["DesignSystemMacTests"])
+        ),
+        // Same pattern for the Signaling test targets (Task 4).
+        .scheme(
+            name: "SignalingTests",
+            buildAction: .buildAction(targets: ["SignalingTests"]),
+            testAction: .targets(["SignalingTests"])
+        ),
+        .scheme(
+            name: "SignalingMacTests",
+            buildAction: .buildAction(targets: ["SignalingMacTests"]),
+            testAction: .targets(["SignalingMacTests"])
         ),
     ]
 )

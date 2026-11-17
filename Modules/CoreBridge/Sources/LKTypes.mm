@@ -7,6 +7,7 @@
 
 #include <string_view>
 
+#include <linko/envelope.hpp>
 #include <linko/messages.hpp>
 
 // The core only produces valid UTF-8, so this conversion is total; on the
@@ -51,5 +52,9 @@ LK_TYPE_GETTER(msgSync, linko::kTypeMsgSync)
 LK_TYPE_GETTER(fileOffer, linko::kTypeFileOffer)
 LK_TYPE_GETTER(fileAccept, linko::kTypeFileAccept)
 LK_TYPE_GETTER(fileCancel, linko::kTypeFileCancel)
+
++ (NSUInteger)maxEnvelopeBytes {
+  return linko::kMaxEnvelopeBytes;
+}
 
 @end

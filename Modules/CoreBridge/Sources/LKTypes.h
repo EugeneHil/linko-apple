@@ -7,6 +7,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+NS_SWIFT_SENDABLE
 @interface LKTypes : NSObject
 // session family
 @property (class, nonatomic, readonly, copy) NSString *sessionHello;
@@ -38,6 +39,10 @@ NS_ASSUME_NONNULL_BEGIN
 @property (class, nonatomic, readonly, copy) NSString *fileOffer;
 @property (class, nonatomic, readonly, copy) NSString *fileAccept;
 @property (class, nonatomic, readonly, copy) NSString *fileCancel;
+// wire limits
+/// The envelope size limit (linko::kMaxEnvelopeBytes): frames above it are
+/// rejected as oversized before any JSON parsing, client and server alike.
+@property (class, nonatomic, readonly) NSUInteger maxEnvelopeBytes;
 
 - (instancetype)init NS_UNAVAILABLE;
 + (instancetype)new NS_UNAVAILABLE;
