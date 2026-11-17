@@ -182,6 +182,22 @@ public actor DefaultCallEngine: CallMediaEngine {
         return answer
     }
 
+    public func restartIce() async throws -> String {
+        guard let connection = peerConnection else {
+            throw CallEngineError.notPrepared
+        }
+        // The legacy iceRestart mandatory constraint is how a fresh offer
+        // requests an ICE restart under the unified plan; the peer answers
+        // it through the regular call.offer / call.answer exchange.
+        let constraints = RTCMediaConstraints(
+            mandatoryConstraints: Self.restartIceMandatory,
+            optionalConstraints: nil
+        )
+        let offer = try await connection.makeOffer(constraints)
+        try await connection.setLocalDescription(offer, isAnswer: false)
+        return offer
+    }
+
     public func setRemoteSDP(_ sdp: String, isAnswer: Bool) async throws {
         guard let connection = peerConnection else {
             throw CallEngineError.notPrepared
@@ -261,6 +277,13 @@ public actor DefaultCallEngine: CallMediaEngine {
     private static var mediaConstraints: RTCMediaConstraints {
         RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
     }
+
+    /// The mandatory constraints of a restart offer: the pinned legacy
+    /// iceRestart key/value pair (the restart trigger under the unified
+    /// plan). Whether WebRTC honors it is device-e2e territory (Task 15).
+    static let restartIceMandatory: [String: String] = [
+        kRTCMediaConstraintsIceRestart: kRTCMediaConstraintsValueTrue
+    ]
 }
 
 // MARK: - Wiring and polling

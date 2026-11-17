@@ -371,6 +371,73 @@ private let callStatsMacTests = Target.target(
     settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
 )
 
+// Pure-Swift module (Plan 4 Task 9): the call coordinator driving the core
+// call state machine (LKCallStateMachine through CoreBridge), the timer
+// actor behind the machine's StartTimer/CancelTimer effects and the
+// reporting/incoming-source seams CallKit (Task 10) and the Mac presenter
+// implement. Consumes Signaling envelopes and events, CallEngine's media
+// surface and CallStats' report builder — every dependency is declared
+// explicitly (LNK-34 lesson: an undeclared dependency breaks cold builds),
+// and explicit modules are disabled because the Calls target imports
+// Signaling (the Messaging precedent: the clang dependency scanner cannot
+// consume Signaling's framework modulemap).
+private let callsSettings = signingSettings
+    .merging(sharedSettings) { _, shared in shared }
+    .merging(["SWIFT_ENABLE_EXPLICIT_MODULES": "NO"]) { _, override in override }
+
+private let calls = Target.target(
+    name: "Calls",
+    destinations: [.iPhone, .mac],
+    product: .framework,
+    bundleId: "io.github.eugenehil.linko.Calls",
+    deploymentTargets: .multiplatform(iOS: "18.0", macOS: "15.0"),
+    infoPlist: .default,
+    sources: ["Modules/Calls/Sources/**"],
+    dependencies: [
+        .target(name: "CoreBridge"),
+        .target(name: "Signaling"),
+        .target(name: "CallEngine"),
+        .target(name: "CallStats"),
+    ],
+    settings: .settings(base: callsSettings)
+)
+
+private let callsTests = Target.target(
+    name: "CallsTests",
+    destinations: [.iPhone],
+    product: .unitTests,
+    bundleId: "io.github.eugenehil.linko.CallsTests",
+    deploymentTargets: .iOS("18.0"),
+    infoPlist: .default,
+    sources: ["Modules/Calls/Tests/**"],
+    dependencies: [
+        .target(name: "Calls"),
+        .target(name: "CoreBridge"),
+        .target(name: "Signaling"),
+        .target(name: "CallEngine"),
+        .target(name: "CallStats"),
+    ],
+    settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
+)
+
+private let callsMacTests = Target.target(
+    name: "CallsMacTests",
+    destinations: [.mac],
+    product: .unitTests,
+    bundleId: "io.github.eugenehil.linko.CallsMacTests",
+    deploymentTargets: .macOS("15.0"),
+    infoPlist: .default,
+    sources: ["Modules/Calls/Tests/**"],
+    dependencies: [
+        .target(name: "Calls"),
+        .target(name: "CoreBridge"),
+        .target(name: "Signaling"),
+        .target(name: "CallEngine"),
+        .target(name: "CallStats"),
+    ],
+    settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
+)
+
 // Pure-Swift module (Plan 4 Task 11): P2P file transfer over the call's data
 // channel with ack framing and backpressure, plus the server transport
 // fallback. Consumes CoreBridge chunking (LKFileChunker/LKFileReassembler/
@@ -598,6 +665,9 @@ let project = Project(
         callStats,
         callStatsTests,
         callStatsMacTests,
+        calls,
+        callsTests,
+        callsMacTests,
         fileTransfer,
         fileTransferTests,
         fileTransferMacTests,
@@ -692,6 +762,17 @@ let project = Project(
             name: "CallStatsMacTests",
             buildAction: .buildAction(targets: ["CallStatsMacTests"]),
             testAction: .targets(["CallStatsMacTests"])
+        ),
+        // Same pattern for the Calls test targets (Task 9).
+        .scheme(
+            name: "CallsTests",
+            buildAction: .buildAction(targets: ["CallsTests"]),
+            testAction: .targets(["CallsTests"])
+        ),
+        .scheme(
+            name: "CallsMacTests",
+            buildAction: .buildAction(targets: ["CallsMacTests"]),
+            testAction: .targets(["CallsMacTests"])
         ),
         // Same pattern for the FileTransfer test targets (Task 11).
         .scheme(
