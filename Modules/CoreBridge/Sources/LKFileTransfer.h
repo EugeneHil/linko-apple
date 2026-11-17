@@ -9,7 +9,10 @@
 NS_ASSUME_NONNULL_BEGIN
 
 /// linko::FileManifest — what a file looks like before any byte moves.
-/// sha256Hex is the lowercase hex digest of the whole file.
+/// sha256Hex is the lowercase hex digest of the whole file. All fields are
+/// immutable, so the object is safe to cross actor boundaries (Task 11
+/// hands manifests into the transfer actors).
+NS_SWIFT_SENDABLE
 @interface LKFileManifest : NSObject
 @property (nonatomic, readonly, copy) NSString *name;
 @property (nonatomic, readonly) uint64_t size;
@@ -37,7 +40,8 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 /// linko::ChunkFrame — a parsed chunk frame; fileId is the raw 16 bytes from
-/// the wire.
+/// the wire. Immutable like the manifest, so it may cross actors too.
+NS_SWIFT_SENDABLE
 @interface LKChunkFrame : NSObject
 @property (nonatomic, readonly, strong) NSData *fileId;
 @property (nonatomic, readonly) uint32_t index;

@@ -371,6 +371,64 @@ private let callStatsMacTests = Target.target(
     settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
 )
 
+// Pure-Swift module (Plan 4 Task 11): P2P file transfer over the call's data
+// channel with ack framing and backpressure, plus the server transport
+// fallback. Consumes CoreBridge chunking (LKFileChunker/LKFileReassembler/
+// LKAckTracker), CallEngine's data channel, ServerAPI's FilesClient and
+// Signaling events for the file.* envelopes. Explicit modules are disabled
+// here as well: the clang dependency scanner cannot consume the Signaling
+// framework's modulemap while Signaling is still compiling (LNK-32).
+private let fileTransferSettings = signingSettings
+    .merging(sharedSettings) { _, shared in shared }
+    .merging(["SWIFT_ENABLE_EXPLICIT_MODULES": "NO"]) { _, override in override }
+
+private let fileTransfer = Target.target(
+    name: "FileTransfer",
+    destinations: [.iPhone, .mac],
+    product: .framework,
+    bundleId: "io.github.eugenehil.linko.FileTransfer",
+    deploymentTargets: .multiplatform(iOS: "18.0", macOS: "15.0"),
+    infoPlist: .default,
+    sources: ["Modules/FileTransfer/Sources/**"],
+    dependencies: [
+        .target(name: "CoreBridge"),
+        .target(name: "Signaling"),
+        .target(name: "ServerAPI"),
+        .target(name: "CallEngine"),
+    ],
+    settings: .settings(base: fileTransferSettings)
+)
+
+private let fileTransferTests = Target.target(
+    name: "FileTransferTests",
+    destinations: [.iPhone],
+    product: .unitTests,
+    bundleId: "io.github.eugenehil.linko.FileTransferTests",
+    deploymentTargets: .iOS("18.0"),
+    infoPlist: .default,
+    sources: ["Modules/FileTransfer/Tests/**"],
+    dependencies: [
+        .target(name: "FileTransfer"),
+        .target(name: "CoreBridge"),
+    ],
+    settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
+)
+
+private let fileTransferMacTests = Target.target(
+    name: "FileTransferMacTests",
+    destinations: [.mac],
+    product: .unitTests,
+    bundleId: "io.github.eugenehil.linko.FileTransferMacTests",
+    deploymentTargets: .macOS("15.0"),
+    infoPlist: .default,
+    sources: ["Modules/FileTransfer/Tests/**"],
+    dependencies: [
+        .target(name: "FileTransfer"),
+        .target(name: "CoreBridge"),
+    ],
+    settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
+)
+
 let project = Project(
     name: "Linko",
     targets: [
@@ -397,6 +455,9 @@ let project = Project(
         callStats,
         callStatsTests,
         callStatsMacTests,
+        fileTransfer,
+        fileTransferTests,
+        fileTransferMacTests,
     ],
     schemes: [
         // One scheme per CoreBridge test target so both platforms can be
@@ -476,6 +537,17 @@ let project = Project(
             name: "CallStatsMacTests",
             buildAction: .buildAction(targets: ["CallStatsMacTests"]),
             testAction: .targets(["CallStatsMacTests"])
+        ),
+        // Same pattern for the FileTransfer test targets (Task 11).
+        .scheme(
+            name: "FileTransferTests",
+            buildAction: .buildAction(targets: ["FileTransferTests"]),
+            testAction: .targets(["FileTransferTests"])
+        ),
+        .scheme(
+            name: "FileTransferMacTests",
+            buildAction: .buildAction(targets: ["FileTransferMacTests"]),
+            testAction: .targets(["FileTransferMacTests"])
         ),
     ]
 )
