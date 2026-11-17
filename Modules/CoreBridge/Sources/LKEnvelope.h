@@ -12,6 +12,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// One validation problem reported by the core; path is a JSON path such as
 /// "v" or "body.sdp" (core ValidationError).
+NS_SWIFT_SENDABLE
 @interface LKValidationError : NSObject
 @property (nonatomic, readonly, copy) NSString *path;
 @property (nonatomic, readonly, copy) NSString *message;
@@ -22,6 +23,7 @@ NS_ASSUME_NONNULL_BEGIN
 /// Outcome of parsing a wire-format envelope (core ParseResult): envelope is
 /// present only when errors is empty; unsupportedVersion flags any v != 1 so
 /// callers can answer with session.error{code:"unsupported_version"}.
+NS_SWIFT_SENDABLE
 @interface LKParseResult : NSObject
 @property (nonatomic, readonly, strong, nullable) LKEnvelope *envelope;
 @property (nonatomic, readonly, copy) NSArray<LKValidationError *> *errors;
@@ -33,6 +35,7 @@ NS_ASSUME_NONNULL_BEGIN
 /// Protocol v1 envelope (spec 4.2) wrapping linko::Envelope. body stays raw
 /// JSON in canonical form; the typed per-family accessors in LKMessages.h
 /// produce and consume it.
+NS_SWIFT_SENDABLE
 @interface LKEnvelope : NSObject
 @property (nonatomic, readonly) NSInteger v;
 @property (nonatomic, readonly, copy) NSString *type;
