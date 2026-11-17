@@ -208,7 +208,10 @@ private let messaging = Target.target(
     deploymentTargets: .multiplatform(iOS: "18.0", macOS: "15.0"),
     infoPlist: .default,
     sources: ["Modules/Messaging/Sources/**"],
-    dependencies: [.target(name: "CoreBridge"), .external(name: "GRDB")],
+    // MessagingService imports Signaling (LNK-32 follow-up): without the
+    // declared dependency the cold build races it at compile and link
+    // (missing Signaling-Swift.h / framework binary) on both platforms.
+    dependencies: [.target(name: "CoreBridge"), .target(name: "Signaling"), .external(name: "GRDB")],
     settings: .settings(base: messagingSettings)
 )
 
@@ -327,6 +330,47 @@ private let callEngineMacTests = Target.target(
     settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
 )
 
+// Pure-Swift module (Plan 4 Task 8): the stats deriver, the adaptation
+// policy (cut #3: cellular/Low-Data-Mode cap only) and the Task-based stats
+// poller — pure logic over CallEngine's RawStatsReport/BitratePlan values.
+// The report upload client lives in ServerAPI (ReportsClient); the
+// coordinator (Task 9) wires the upload and the network inputs.
+private let callStats = Target.target(
+    name: "CallStats",
+    destinations: [.iPhone, .mac],
+    product: .framework,
+    bundleId: "io.github.eugenehil.linko.CallStats",
+    deploymentTargets: .multiplatform(iOS: "18.0", macOS: "15.0"),
+    infoPlist: .default,
+    sources: ["Modules/CallStats/Sources/**"],
+    dependencies: [.target(name: "CallEngine")],
+    settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
+)
+
+private let callStatsTests = Target.target(
+    name: "CallStatsTests",
+    destinations: [.iPhone],
+    product: .unitTests,
+    bundleId: "io.github.eugenehil.linko.CallStatsTests",
+    deploymentTargets: .iOS("18.0"),
+    infoPlist: .default,
+    sources: ["Modules/CallStats/Tests/**"],
+    dependencies: [.target(name: "CallStats"), .target(name: "CallEngine")],
+    settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
+)
+
+private let callStatsMacTests = Target.target(
+    name: "CallStatsMacTests",
+    destinations: [.mac],
+    product: .unitTests,
+    bundleId: "io.github.eugenehil.linko.CallStatsMacTests",
+    deploymentTargets: .macOS("15.0"),
+    infoPlist: .default,
+    sources: ["Modules/CallStats/Tests/**"],
+    dependencies: [.target(name: "CallStats"), .target(name: "CallEngine")],
+    settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
+)
+
 let project = Project(
     name: "Linko",
     targets: [
@@ -350,6 +394,9 @@ let project = Project(
         callEngine,
         callEngineTests,
         callEngineMacTests,
+        callStats,
+        callStatsTests,
+        callStatsMacTests,
     ],
     schemes: [
         // One scheme per CoreBridge test target so both platforms can be
@@ -418,6 +465,17 @@ let project = Project(
             name: "CallEngineMacTests",
             buildAction: .buildAction(targets: ["CallEngineMacTests"]),
             testAction: .targets(["CallEngineMacTests"])
+        ),
+        // Same pattern for the CallStats test targets (Task 8).
+        .scheme(
+            name: "CallStatsTests",
+            buildAction: .buildAction(targets: ["CallStatsTests"]),
+            testAction: .targets(["CallStatsTests"])
+        ),
+        .scheme(
+            name: "CallStatsMacTests",
+            buildAction: .buildAction(targets: ["CallStatsMacTests"]),
+            testAction: .targets(["CallStatsMacTests"])
         ),
     ]
 )
