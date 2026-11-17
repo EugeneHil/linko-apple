@@ -11,6 +11,10 @@ excluded:
   # identifier_name (s4/s8) or nesting (Tokens.Colors.Light); freshness is
   # enforced by Scripts/check-tokens.sh instead.
   - Modules/DesignSystem/Sources/Tokens.swift
+  # The public spacing mirror (Plan 4 Task 12) re-exports the generated
+  # token names (s4/s8...) verbatim, so it carries the same exemption; the
+  # mirror test pins the values to the generated source of truth.
+  - Modules/DesignSystem/Sources/PublicTokens.swift
 line_length:
   warning: 160
   error: 200

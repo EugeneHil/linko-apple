@@ -429,6 +429,149 @@ private let fileTransferMacTests = Target.target(
     settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
 )
 
+// Pure-Swift feature modules (Plan 4 Task 12): view models (@Observable,
+// @MainActor, all dependencies injected by initializer) plus thin SwiftUI
+// views over DesignSystem components. Onboarding/Settings consume ServerAPI;
+// Chats/Conversation consume Messaging (Conversation also FileTransfer).
+// Chats and Conversation disable explicit modules: the clang dependency
+// scanner cannot consume the Messaging framework's modulemap while it is
+// still compiling (the LNK-32 first-consumer lesson, one hop further).
+private let featuresSettings = signingSettings
+    .merging(sharedSettings) { _, shared in shared }
+    .merging(["SWIFT_ENABLE_EXPLICIT_MODULES": "NO"]) { _, override in override }
+
+private func featureTarget(
+    name: String,
+    dependencies: [TargetDependency],
+    settings: SettingsDictionary
+) -> Target {
+    Target.target(
+        name: name,
+        destinations: [.iPhone, .mac],
+        product: .framework,
+        bundleId: "io.github.eugenehil.linko.\(name)",
+        deploymentTargets: .multiplatform(iOS: "18.0", macOS: "15.0"),
+        infoPlist: .default,
+        sources: ["Modules/Features/\(name)/Sources/**"],
+        dependencies: dependencies,
+        settings: .settings(base: settings)
+    )
+}
+
+private func featureTestsTarget(
+    name: String,
+    destinations: Destinations,
+    dependencies: [TargetDependency]
+) -> Target {
+    let isMac = destinations.contains(.mac)
+    let suffix = isMac ? "MacTests" : "Tests"
+    return Target.target(
+        name: "\(name)\(suffix)",
+        destinations: destinations,
+        product: .unitTests,
+        bundleId: "io.github.eugenehil.linko.\(name)\(suffix)",
+        deploymentTargets: isMac ? .macOS("15.0") : .iOS("18.0"),
+        infoPlist: .default,
+        sources: ["Modules/Features/\(name)/Tests/**"],
+        dependencies: [.target(name: name)] + dependencies,
+        settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
+    )
+}
+
+private let onboarding = featureTarget(
+    name: "Onboarding",
+    dependencies: [.target(name: "ServerAPI"), .target(name: "DesignSystem")],
+    settings: signingSettings.merging(sharedSettings) { _, shared in shared }
+)
+
+private let chats = featureTarget(
+    name: "Chats",
+    dependencies: [.target(name: "Messaging"), .target(name: "DesignSystem")],
+    settings: featuresSettings
+)
+
+private let conversation = featureTarget(
+    name: "Conversation",
+    dependencies: [
+        .target(name: "Messaging"),
+        .target(name: "FileTransfer"),
+        .target(name: "DesignSystem"),
+    ],
+    settings: featuresSettings
+)
+
+private let settings = featureTarget(
+    name: "Settings",
+    dependencies: [
+        .target(name: "ServerAPI"),
+        .target(name: "Messaging"),
+        .target(name: "DesignSystem"),
+    ],
+    settings: featuresSettings
+)
+
+private let onboardingTests = featureTestsTarget(
+    name: "Onboarding",
+    destinations: [.iPhone],
+    dependencies: [.target(name: "ServerAPI")]
+)
+
+private let onboardingMacTests = featureTestsTarget(
+    name: "Onboarding",
+    destinations: [.mac],
+    dependencies: [.target(name: "ServerAPI")]
+)
+
+private let chatsTests = featureTestsTarget(
+    name: "Chats",
+    destinations: [.iPhone],
+    dependencies: [.target(name: "Messaging")]
+)
+
+private let chatsMacTests = featureTestsTarget(
+    name: "Chats",
+    destinations: [.mac],
+    dependencies: [.target(name: "Messaging")]
+)
+
+private let conversationTests = featureTestsTarget(
+    name: "Conversation",
+    destinations: [.iPhone],
+    dependencies: [
+        .target(name: "Messaging"),
+        .target(name: "FileTransfer"),
+        .target(name: "CoreBridge"),
+    ]
+)
+
+private let conversationMacTests = featureTestsTarget(
+    name: "Conversation",
+    destinations: [.mac],
+    dependencies: [
+        .target(name: "Messaging"),
+        .target(name: "FileTransfer"),
+        .target(name: "CoreBridge"),
+    ]
+)
+
+private let settingsTests = featureTestsTarget(
+    name: "Settings",
+    destinations: [.iPhone],
+    dependencies: [
+        .target(name: "ServerAPI"),
+        .target(name: "Messaging"),
+    ]
+)
+
+private let settingsMacTests = featureTestsTarget(
+    name: "Settings",
+    destinations: [.mac],
+    dependencies: [
+        .target(name: "ServerAPI"),
+        .target(name: "Messaging"),
+    ]
+)
+
 let project = Project(
     name: "Linko",
     targets: [
@@ -458,6 +601,18 @@ let project = Project(
         fileTransfer,
         fileTransferTests,
         fileTransferMacTests,
+        onboarding,
+        chats,
+        conversation,
+        settings,
+        onboardingTests,
+        onboardingMacTests,
+        chatsTests,
+        chatsMacTests,
+        conversationTests,
+        conversationMacTests,
+        settingsTests,
+        settingsMacTests,
     ],
     schemes: [
         // One scheme per CoreBridge test target so both platforms can be
@@ -548,6 +703,47 @@ let project = Project(
             name: "FileTransferMacTests",
             buildAction: .buildAction(targets: ["FileTransferMacTests"]),
             testAction: .targets(["FileTransferMacTests"])
+        ),
+        // Same pattern for the feature test targets (Task 12).
+        .scheme(
+            name: "OnboardingTests",
+            buildAction: .buildAction(targets: ["OnboardingTests"]),
+            testAction: .targets(["OnboardingTests"])
+        ),
+        .scheme(
+            name: "OnboardingMacTests",
+            buildAction: .buildAction(targets: ["OnboardingMacTests"]),
+            testAction: .targets(["OnboardingMacTests"])
+        ),
+        .scheme(
+            name: "ChatsTests",
+            buildAction: .buildAction(targets: ["ChatsTests"]),
+            testAction: .targets(["ChatsTests"])
+        ),
+        .scheme(
+            name: "ChatsMacTests",
+            buildAction: .buildAction(targets: ["ChatsMacTests"]),
+            testAction: .targets(["ChatsMacTests"])
+        ),
+        .scheme(
+            name: "ConversationTests",
+            buildAction: .buildAction(targets: ["ConversationTests"]),
+            testAction: .targets(["ConversationTests"])
+        ),
+        .scheme(
+            name: "ConversationMacTests",
+            buildAction: .buildAction(targets: ["ConversationMacTests"]),
+            testAction: .targets(["ConversationMacTests"])
+        ),
+        .scheme(
+            name: "SettingsTests",
+            buildAction: .buildAction(targets: ["SettingsTests"]),
+            testAction: .targets(["SettingsTests"])
+        ),
+        .scheme(
+            name: "SettingsMacTests",
+            buildAction: .buildAction(targets: ["SettingsMacTests"]),
+            testAction: .targets(["SettingsMacTests"])
         ),
     ]
 )

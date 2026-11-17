@@ -85,4 +85,28 @@ mise exec -- tuist test FileTransferTests -- -destination "id=$ios_udid"
 echo "== FileTransfer tests on macOS"
 mise exec -- tuist test FileTransferMacTests -- -destination "platform=macOS"
 
+echo "== Onboarding tests on the iOS simulator ($ios_udid)"
+mise exec -- tuist test OnboardingTests -- -destination "id=$ios_udid"
+
+echo "== Onboarding tests on macOS"
+mise exec -- tuist test OnboardingMacTests -- -destination "platform=macOS"
+
+echo "== Chats tests on the iOS simulator ($ios_udid)"
+mise exec -- tuist test ChatsTests -- -destination "id=$ios_udid"
+
+echo "== Chats tests on macOS"
+mise exec -- tuist test ChatsMacTests -- -destination "platform=macOS"
+
+echo "== Conversation tests on the iOS simulator ($ios_udid)"
+mise exec -- tuist test ConversationTests -- -destination "id=$ios_udid"
+
+echo "== Conversation tests on macOS"
+mise exec -- tuist test ConversationMacTests -- -destination "platform=macOS"
+
+echo "== Settings tests on the iOS simulator ($ios_udid)"
+mise exec -- tuist test SettingsTests -- -destination "id=$ios_udid"
+
+echo "== Settings tests on macOS"
+mise exec -- tuist test SettingsMacTests -- -destination "platform=macOS"
+
 echo "ci-local: OK"

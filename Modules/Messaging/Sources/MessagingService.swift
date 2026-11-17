@@ -23,6 +23,10 @@ public enum MessagingEvent: Sendable, Equatable {
     case presenceChanged(user: String, online: Bool)
     case sessionError(code: String, detail: String)
     case messageStored(StoredMessage)
+    /// The signaling connection lifecycle for the UI banners
+    /// (offline/reconnecting, spec 4.7): `false` on .disconnected, `true`
+    /// again on .connected.
+    case connectionChanged(online: Bool)
 }
 
 /// The send seam — the real implementation forwards to SignalingClient;
@@ -72,13 +76,16 @@ public actor MessagingService {
     public func handle(_ event: SignalingEvent) async {
         switch event {
         case .connected:
+            eventsContinuation.yield(.connectionChanged(online: true))
             await handleConnected()
         case let .envelope(envelope):
             await handle(envelope)
         case let .error(.sessionError(code, detail)):
             eventsContinuation.yield(.sessionError(code: code, detail: detail))
-        case .error, .disconnected:
-            break // reconnects are the signaling client's job
+        case .disconnected:
+            eventsContinuation.yield(.connectionChanged(online: false))
+        case .error:
+            break // transport errors precede the disconnect event
         }
     }
 

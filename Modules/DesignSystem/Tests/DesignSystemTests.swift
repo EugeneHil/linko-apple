@@ -14,6 +14,17 @@ import XCTest
 final class DesignSystemTests: XCTestCase {
     // MARK: - Token freshness (spec 4.8: CI checks the generated file is up to date)
 
+    /// The public spacing surface (Task 12 feature views) mirrors the
+    /// generated internal tokens — one source of truth, no drift.
+    func test_public_spacing_mirrors_generated_tokens() {
+        XCTAssertEqual(LKTokens.Spacing.s4, Tokens.Spacing.s4)
+        XCTAssertEqual(LKTokens.Spacing.s8, Tokens.Spacing.s8)
+        XCTAssertEqual(LKTokens.Spacing.s12, Tokens.Spacing.s12)
+        XCTAssertEqual(LKTokens.Spacing.s16, Tokens.Spacing.s16)
+        XCTAssertEqual(LKTokens.Spacing.s24, Tokens.Spacing.s24)
+        XCTAssertEqual(LKTokens.Spacing.s32, Tokens.Spacing.s32)
+    }
+
     func test_generated_tokens_fresh() throws {
         #if canImport(AppKit)
             let script = try Self.repoRoot().appendingPathComponent("Scripts/check-tokens.sh")
