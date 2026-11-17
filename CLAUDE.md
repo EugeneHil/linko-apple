@@ -14,6 +14,15 @@ Linko: a private 1:1 messenger for iPhone and Mac with audio/video calls and fil
 - **Warnings are errors** in every language.
 - **Docs:** English.
 
+## Stack
+
+- Toolchain: Xcode 27, Tuist 4.212.0 via mise — always `mise exec -- tuist …` (pin in `.mise.toml`); Swift 6 language mode, strict concurrency `complete`, warnings are errors on every target.
+- Workspace: `Workspace.swift` + `Project.swift` at the repo root; app targets `LinkoiOS` (iOS 18) and `LinkoMac` (macOS 15); modules are frameworks under `Modules/` with a test target each.
+- Core: `external/linko-core` git submodule pinned to tag `v0.1.0`; `Scripts/build-core.sh <macosx|iphoneos|iphonesimulator>` builds it into `Derived/core/<destination>/liblinko_core.a` (CMake, Release, arm64) and runs automatically as a pre-build action on `CoreBridge`. After bumping the submodule: `git submodule update --init external/linko-core && git -C external/linko-core checkout v<new-tag>` and delete `Derived/core/` to reconfigure.
+- Dependencies: declared in `Tuist/Package.swift` with exact pins; `Tuist/Package.resolved` records the resolved revisions. Refresh it with `mise exec -- tuist install` when pins change (known issue: the install-time binary-artifact prefetch can stall — the artifact then downloads at first build; see ADR-0004). Every new dependency needs an ADR (ADR-0004 for WebRTC/GRDB/Tuist).
+- Build/test: `mise exec -- tuist generate`, then test through `Scripts/ci-local.sh` — SwiftFormat `--lint`, SwiftLint `--strict`, generate, CoreBridge tests on the iOS simulator and macOS.
+- Lint configs: `.swiftlint.yml` and `.swiftformat` at the repo root.
+
 ## Guard hook
 
 `tooling/claude/guard.py` runs before every Read/Edit/Write/Bash call and enforces the secret and branch rules above. Do not disable it. Tests: `python3 -I -B -m unittest discover -s tooling/claude`.

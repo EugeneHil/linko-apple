@@ -39,3 +39,5 @@ data/
 *.profraw
 coverage/
 # --- end linko shared ignores ---
+# Repo-local: Tuist's SwiftPM workspace (cloned checkouts, never committed)
+Tuist/.build/

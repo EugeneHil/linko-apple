@@ -1,0 +1,3 @@
+# Toolchain pins (ADR-0004): Tuist 4.212.0 via mise, Xcode 27 from the host.
+[tools]
+tuist = "4.212.0"
