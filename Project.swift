@@ -1,6 +1,6 @@
 // Root Tuist project (Plan 4 Task 1): the two app stubs plus the CoreBridge
-// framework with one test target per platform. Later tasks add module
-// targets to this manifest.
+// framework with one test target per platform. Task 3 adds the DesignSystem
+// module; later tasks add further module targets to this manifest.
 import ProjectDescription
 
 // Swift 6 language mode with strict concurrency `complete` and
@@ -115,6 +115,43 @@ private let coreBridgeMacTests = Target.target(
     settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
 )
 
+// Pure-Swift module (Plan 4 Task 3): the generated Tokens.swift plus the ten
+// SwiftUI components — no headers and no CoreBridge dependency needed.
+private let designSystem = Target.target(
+    name: "DesignSystem",
+    destinations: [.iPhone, .mac],
+    product: .framework,
+    bundleId: "io.github.eugenehil.linko.DesignSystem",
+    deploymentTargets: .multiplatform(iOS: "18.0", macOS: "15.0"),
+    infoPlist: .default,
+    sources: ["Modules/DesignSystem/Sources/**"],
+    settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
+)
+
+private let designSystemTests = Target.target(
+    name: "DesignSystemTests",
+    destinations: [.iPhone],
+    product: .unitTests,
+    bundleId: "io.github.eugenehil.linko.DesignSystemTests",
+    deploymentTargets: .iOS("18.0"),
+    infoPlist: .default,
+    sources: ["Modules/DesignSystem/Tests/**"],
+    dependencies: [.target(name: "DesignSystem")],
+    settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
+)
+
+private let designSystemMacTests = Target.target(
+    name: "DesignSystemMacTests",
+    destinations: [.mac],
+    product: .unitTests,
+    bundleId: "io.github.eugenehil.linko.DesignSystemMacTests",
+    deploymentTargets: .macOS("15.0"),
+    infoPlist: .default,
+    sources: ["Modules/DesignSystem/Tests/**"],
+    dependencies: [.target(name: "DesignSystem")],
+    settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
+)
+
 let project = Project(
     name: "Linko",
     targets: [
@@ -123,6 +160,9 @@ let project = Project(
         coreBridge,
         coreBridgeTests,
         coreBridgeMacTests,
+        designSystem,
+        designSystemTests,
+        designSystemMacTests,
     ],
     schemes: [
         // One scheme per CoreBridge test target so both platforms can be
@@ -136,6 +176,17 @@ let project = Project(
             name: "CoreBridgeMacTests",
             buildAction: .buildAction(targets: ["CoreBridgeMacTests"]),
             testAction: .targets(["CoreBridgeMacTests"])
+        ),
+        // Same pattern for the DesignSystem test targets (Task 3).
+        .scheme(
+            name: "DesignSystemTests",
+            buildAction: .buildAction(targets: ["DesignSystemTests"]),
+            testAction: .targets(["DesignSystemTests"])
+        ),
+        .scheme(
+            name: "DesignSystemMacTests",
+            buildAction: .buildAction(targets: ["DesignSystemMacTests"]),
+            testAction: .targets(["DesignSystemMacTests"])
         ),
     ]
 )

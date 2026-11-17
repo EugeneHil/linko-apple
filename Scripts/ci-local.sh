@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Local CI for linko-apple (Plan 4 Task 1): SwiftFormat lint, SwiftLint
-# strict, then tuist generate and the CoreBridge test targets on the iOS
-# simulator and on macOS. Task 14 (LNK-40) extends this script with the
-# coverage gate and the design-token freshness check (Task 3).
+# strict, then tuist generate and the module test targets on the iOS
+# simulator and on macOS. Task 3 (LNK-29) added the design-token freshness
+# check and the DesignSystem test targets; Task 14 (LNK-40) extends this
+# script with the coverage gate.
 #
 # Usage: Scripts/ci-local.sh
 #   IOS_SIMULATOR_UDID env var overrides the picked device (default: the
@@ -17,6 +18,9 @@ swiftformat --lint .
 
 echo "== SwiftLint strict"
 swiftlint --strict
+
+echo "== Design tokens freshness"
+Scripts/check-tokens.sh
 
 echo "== tuist generate"
 mise exec -- tuist generate
@@ -38,5 +42,11 @@ mise exec -- tuist test CoreBridgeTests -- -destination "id=$ios_udid"
 
 echo "== CoreBridge tests on macOS"
 mise exec -- tuist test CoreBridgeMacTests -- -destination "platform=macOS"
+
+echo "== DesignSystem tests on the iOS simulator ($ios_udid)"
+mise exec -- tuist test DesignSystemTests -- -destination "id=$ios_udid"
+
+echo "== DesignSystem tests on macOS"
+mise exec -- tuist test DesignSystemMacTests -- -destination "platform=macOS"
 
 echo "ci-local: OK"
