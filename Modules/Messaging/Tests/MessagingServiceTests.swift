@@ -302,4 +302,29 @@ final class MessagingServiceTests: XCTestCase {
 
         run.cancel()
     }
+
+    // MARK: - Connection state (offline/reconnecting banners, Task 12)
+
+    func test_connection_state_surfaces_on_connect_and_disconnect() async throws {
+        let store = try Fixtures.inMemoryStore()
+        let service = makeService(store: store)
+
+        let collector = EventCollector()
+        let stream = await service.events
+        let run = Task {
+            for await event in stream {
+                collector.add(event)
+            }
+        }
+
+        await service.handle(.connected)
+        await service.handle(.disconnected(code: 1006))
+
+        let sawOffline = await waitFor(collector, event: .connectionChanged(online: false))
+        XCTAssertTrue(sawOffline, "a disconnect must surface as offline for the banners")
+        let sawOnline = await waitFor(collector, event: .connectionChanged(online: true))
+        XCTAssertTrue(sawOnline, "a connect must surface as online again")
+
+        run.cancel()
+    }
 }
