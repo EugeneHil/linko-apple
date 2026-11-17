@@ -190,6 +190,52 @@ private let signalingMacTests = Target.target(
     settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
 )
 
+// Pure-Swift module (Plan 4 Task 6): the GRDB-backed message store, the
+// outbox and the messaging service over Signaling events — consumes
+// CoreBridge records and the pinned GRDB. Explicit modules are disabled
+// here: the clang dependency scanner cannot consume the Signaling
+// framework's modulemap, whose generated Signaling-Swift.h does not exist
+// until Signaling compiles (first-consumer build-order bug, LNK-32).
+private let messagingSettings = signingSettings
+    .merging(sharedSettings) { _, shared in shared }
+    .merging(["SWIFT_ENABLE_EXPLICIT_MODULES": "NO"]) { _, override in override }
+
+private let messaging = Target.target(
+    name: "Messaging",
+    destinations: [.iPhone, .mac],
+    product: .framework,
+    bundleId: "io.github.eugenehil.linko.Messaging",
+    deploymentTargets: .multiplatform(iOS: "18.0", macOS: "15.0"),
+    infoPlist: .default,
+    sources: ["Modules/Messaging/Sources/**"],
+    dependencies: [.target(name: "CoreBridge"), .external(name: "GRDB")],
+    settings: .settings(base: messagingSettings)
+)
+
+private let messagingTests = Target.target(
+    name: "MessagingTests",
+    destinations: [.iPhone],
+    product: .unitTests,
+    bundleId: "io.github.eugenehil.linko.MessagingTests",
+    deploymentTargets: .iOS("18.0"),
+    infoPlist: .default,
+    sources: ["Modules/Messaging/Tests/**"],
+    dependencies: [.target(name: "Messaging"), .target(name: "CoreBridge"), .target(name: "Signaling")],
+    settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
+)
+
+private let messagingMacTests = Target.target(
+    name: "MessagingMacTests",
+    destinations: [.mac],
+    product: .unitTests,
+    bundleId: "io.github.eugenehil.linko.MessagingMacTests",
+    deploymentTargets: .macOS("15.0"),
+    infoPlist: .default,
+    sources: ["Modules/Messaging/Tests/**"],
+    dependencies: [.target(name: "Messaging"), .target(name: "CoreBridge"), .target(name: "Signaling")],
+    settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
+)
+
 let project = Project(
     name: "Linko",
     targets: [
@@ -204,6 +250,9 @@ let project = Project(
         signaling,
         signalingTests,
         signalingMacTests,
+        messaging,
+        messagingTests,
+        messagingMacTests,
     ],
     schemes: [
         // One scheme per CoreBridge test target so both platforms can be
@@ -239,6 +288,17 @@ let project = Project(
             name: "SignalingMacTests",
             buildAction: .buildAction(targets: ["SignalingMacTests"]),
             testAction: .targets(["SignalingMacTests"])
+        ),
+        // Same pattern for the Messaging test targets (Task 6).
+        .scheme(
+            name: "MessagingTests",
+            buildAction: .buildAction(targets: ["MessagingTests"]),
+            testAction: .targets(["MessagingTests"])
+        ),
+        .scheme(
+            name: "MessagingMacTests",
+            buildAction: .buildAction(targets: ["MessagingMacTests"]),
+            testAction: .targets(["MessagingMacTests"])
         ),
     ]
 )
