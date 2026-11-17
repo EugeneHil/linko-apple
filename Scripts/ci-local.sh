@@ -61,4 +61,10 @@ mise exec -- tuist test ServerAPITests -- -destination "id=$ios_udid"
 echo "== ServerAPI tests on macOS"
 mise exec -- tuist test ServerAPIMacTests -- -destination "platform=macOS"
 
+echo "== CallEngine tests on the iOS simulator ($ios_udid)"
+mise exec -- tuist test CallEngineTests -- -destination "id=$ios_udid"
+
+echo "== CallEngine tests on macOS"
+mise exec -- tuist test CallEngineMacTests -- -destination "platform=macOS"
+
 echo "ci-local: OK"
