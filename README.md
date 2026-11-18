@@ -2,7 +2,7 @@
 
 iOS and macOS apps of **Linko**, a private 1:1 messenger for iPhone and Mac: text chat, audio and video calls (WebRTC; CallKit on iPhone), and file transfer — served by its own [linko-server](https://github.com/EugeneHil/linko-server). One Tuist workspace, shared Swift modules, and the [linko-core](https://github.com/EugeneHil/linko-core) C++17 core vendored as a submodule behind a single Objective-C++ bridge. Call quality is a first-class citizen: a live stats overlay in the call screen and a per-call quality report uploaded to the server.
 
-Design: [docs/superpowers/specs/2026-10-25-linko-design.md](docs/superpowers/specs/2026-10-25-linko-design.md) (§4.3 is the module map's source of truth). Plans: [docs/superpowers/plans/](docs/superpowers/plans/). Decisions: [docs/adr/](docs/adr/) — ADR-0001 (WebRTC/CallKit/TURN spike), ADR-0004 (this repo's dependencies).
+Design: [docs/superpowers/specs/2026-10-25-linko-design.md](docs/superpowers/specs/2026-10-25-linko-design.md) (§4.3 is the module map's source of truth). Plans: [docs/superpowers/plans/](docs/superpowers/plans/). Decisions: [docs/adr/](docs/adr/) — ADR-0001 (WebRTC/CallKit/TURN spike), ADR-0004 (this repo's dependencies). E2E checklist: [docs/e2e-checklist.md](docs/e2e-checklist.md) — the device-side rows of the v0.1 acceptance scenario, recorded at LNK-41.
 
 ## Architecture (apps side)
 
@@ -35,11 +35,11 @@ Everything above `CoreBridge` is Swift 6 (strict concurrency, warnings as errors
 | `Messaging` | GRDB/SQLite local store, conversation keys matching the server's ordering, outbox that re-sends until the server confirms, sync on gap detection after reconnect, monotonic delivered/read receipts | on develop |
 | `CallEngine` | WebRTC wrapper behind the `CallMediaEngine` protocol (stasel/WebRTC 155.0.0, exact pin): peer connection, tracks and capture where available, data channel, TURN credentials → ICE servers, bitrate plan, 1 s statistics stream. Everything above it is testable without WebRTC | on develop |
 | `CallStats` | Derives bitrate, RTT, loss, jitter, fps, resolution, codec and candidate pair type from raw `getStats` deltas; pure adaptation policy (cellular / Low-Data-Mode bitrate cap); end-of-call quality report | on develop |
-| `Calls` | `CallCoordinator`: drives the core state machine (the machine's effects are its only outputs), connects Signaling, CallEngine, CallKit and stats; exactly one active call; timers (ring 45 s / connect 20 s / reconnect 15 s); glare, duplicates and crossed calls handled by the machine | in flight (LNK-35) |
-| `CallKitIntegration` | iOS: `CXProvider`/`CXCallController` adapter, audio session in step with CallKit activation (WebRTC manual audio), route changes and interruptions. macOS: own incoming-call window plus a user notification instead | in flight (LNK-36) |
-| `FileTransfer` | In-call P2P over the data channel (16 KiB chunks, backpressure on `bufferedAmount`, resume from the last acknowledged chunk, SHA-256 verified); outside calls via the server (100 MB cap). Every completed transfer is recorded as a normal message, so it lands in history with receipts | in flight (LNK-37) |
-| `Features`: `Onboarding`, `Chats`, `Conversation`, `Call`, `Settings` | SwiftUI views + `@Observable @MainActor` view models, shared between platforms with platform-specific views only where the platforms differ | in flight (LNK-38/39) |
-| Apps: `LinkoiOS`, `LinkoMac` | Composition roots wiring Keychain → Signaling → Messaging → Calls → FileTransfer → features; entitlements, Info.plist | stubs on develop; roots land with LNK-39 |
+| `Calls` | `CallCoordinator`: drives the core state machine (the machine's effects are its only outputs), connects Signaling, CallEngine, CallKit and stats; exactly one active call; timers (ring 45 s / connect 20 s / reconnect 15 s); glare, duplicates and crossed calls handled by the machine | on develop |
+| `CallKitIntegration` | iOS: `CXProvider`/`CXCallController` adapter, audio session in step with CallKit activation (WebRTC manual audio), route changes and interruptions. macOS: own incoming-call window plus a user notification instead | on develop |
+| `FileTransfer` | In-call P2P over the data channel (16 KiB chunks, backpressure on `bufferedAmount`, resume from the last acknowledged chunk, SHA-256 verified); outside calls via the server (100 MB cap). Every completed transfer is recorded as a normal message, so it lands in history with receipts | on develop |
+| `Features`: `Onboarding`, `Chats`, `Conversation`, `Call`, `Settings` | SwiftUI views + `@Observable @MainActor` view models, shared between platforms with platform-specific views only where the platforms differ | on develop |
+| Apps: `LinkoiOS`, `LinkoMac` | Composition roots wiring Keychain → Signaling → Messaging → Calls → FileTransfer → features; entitlements, Info.plist | on develop |
 
 ## Incoming calls without PushKit
 
@@ -49,14 +49,14 @@ v0.1 signs with the free Apple Personal Team — no APNs/PushKit (spec §2, §3)
 
 - **Toolchain:** Xcode 27, Tuist 4.212.0 via mise (pinned in `.mise.toml`) — always `mise exec -- tuist …`.
 - **Submodule:** `git submodule update --init --recursive` after clone (`external/linko-core` pinned to tag `v0.1.0`).
-- **One command:** `Scripts/ci-local.sh` — SwiftFormat `--lint`, SwiftLint `--strict`, the design-token freshness check, `tuist generate`, and every module test target on the iOS simulator and macOS.
+- **One command:** `Scripts/ci-local.sh` — SwiftFormat `--lint`, SwiftLint `--strict`, the design-token freshness check, `tuist generate`, and every module test target on the iOS simulator and macOS. Every test invocation is hollow-gate hardened: a suite whose output says "no tests to run" or lacks an `Executed N tests` summary fails the script instead of passing silently (the PR-#24 incident).
 - **Core:** `Scripts/build-core.sh <macosx|iphoneos|iphonesimulator>` builds `external/linko-core` into `Derived/core/<destination>/liblinko_core.a`; it runs automatically as a Tuist pre-build action on `CoreBridge`. Delete `Derived/core/` after bumping the submodule pin.
-- **Coverage gate:** ≥ 80 % line coverage of Swift logic — view models, coordinators, repositories, adaptation policy, stats derivation (spec §7). The `xccov` invocation in `Scripts/ci-local.sh` and the CI coverage job land with Task 14 (LNK-40); CI runs its macOS jobs only on pull requests to `develop`/`main` (Actions minutes budget, spec §8).
+- **Coverage gate:** ≥ 80 % line coverage per logic target — `Calls` (the coordinator), `CallStats`, `Messaging`, `ServerAPI` and the five feature modules (spec §7's Swift logic: view models, coordinators, services, policy/stats; `CoreBridge`, the generated `DesignSystem` tokens and the app shells stay outside the gate). `Scripts/ci-local.sh --coverage` re-runs the logic suites with code coverage on the iOS simulator, prints the per-target `xccov` table and fails under the threshold (macOS coverage is deliberately not collected — the gated targets are shared multiplatform code already exercised by that run). The `coverage` job in [.github/workflows/ci.yml](.github/workflows/ci.yml) runs the same gate; CI runs its macOS jobs only on pull requests to `develop`/`main` (Actions minutes budget, spec §8).
 - **Signing:** free Personal Team; the iOS app installs from Xcode onto the owner's iPhone, and provisioning profiles expire after 7 days — refresh by rebuilding.
 
 ## Status
 
-Merged on `develop`: workspace skeleton, `CoreBridge`, `DesignSystem`, `Signaling`, `ServerAPI`, `Messaging`, `CallEngine`, `CallStats` (plan tasks 1–8). In flight: `Calls`, `CallKitIntegration`, `FileTransfer`, the feature modules and composition roots (tasks 9–13). Then CI, coverage wiring and this README's owning task (LNK-40), followed by the on-device e2e run and the `v0.1.0` release (LNK-41, owner-in-loop). Tracker: [docs/superpowers/plans/2026-11-17-linko-04-apple.md](docs/superpowers/plans/2026-11-17-linko-04-apple.md).
+Merged on `develop`: workspace skeleton, `CoreBridge`, `DesignSystem`, `Signaling`, `ServerAPI`, `Messaging`, `CallEngine`, `CallStats` (plan tasks 1–8), then `Calls`, `CallKitIntegration`, `FileTransfer`, the feature modules and the composition roots (tasks 9–13). The CI battery with the hollow-gate hardening, the 80 % logic coverage gate, lint and the token freshness check is this README's owning task (LNK-40). Then the on-device e2e run ([docs/e2e-checklist.md](docs/e2e-checklist.md)) and the `v0.1.0` release (LNK-41, owner-in-loop). Tracker: [docs/superpowers/plans/2026-11-17-linko-04-apple.md](docs/superpowers/plans/2026-11-17-linko-04-apple.md).
 
 ## Roadmap
 
@@ -68,11 +68,3 @@ Items cut from v0.1 with the plan's rationale — each ships when its preconditi
 - **Mac ↔ Mac e2e as a tested scenario** — the Mac call stack ships fully; the acceptance rows cover iPhone ↔ Mac only (spec §1 cut order item 4).
 - **QR onboarding** — paste-only invite links ship; camera scanning is a simulator-untestable surface (Task 13, spec §4.5).
 - **Multi-device** — one device per user in v0.1: registering with a new invite revokes the previous device server-side, which the app sees as a 4001 close and reconnects. App-side device management stays with the server CLI (no client-facing devices endpoint in server v0.1); Settings shows the local device id only.
-
-## Task-14 sync note
-
-This README was written ahead of Task 14 (LNK-40) in a docs-only worktree from `develop` (`d0687c3`), with no builds run. Task 14's own PR must re-verify:
-
-1. The module-map rows marked "in flight" (`Calls`, `CallKitIntegration`, `FileTransfer`, `Features`, the composition roots) once LNK-35…LNK-39 merge — align names, file layouts and responsibilities with what actually merged, and move their State cells to "on develop".
-2. The coverage paragraph — replace the plan-level statement with the real `Scripts/ci-local.sh` coverage invocation and the `ci.yml` job list as implemented, and link `docs/e2e-checklist.md` (created by Task 14) from the docs list.
-3. Plan-level claims against the merged tree before the v0.1 release: the `IncomingCallSource`/`ForegroundWebSocketSource` names, the timer constants (45/20/15 s), the file-cap numbers, and the composition-root wiring order.
