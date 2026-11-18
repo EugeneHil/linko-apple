@@ -47,7 +47,10 @@ jobs:
       - name: Full test battery (iOS simulator + macOS, hollow-gate hardened)
         run: Scripts/ci-local.sh --no-lint
       - name: Upload the Tuist module graph (e2e checklist item 10)
-        run: mise exec -- tuist graph --format png --no-open -o "$RUNNER_TEMP/tuist-graph.png"
+        run: |
+          # tuist graph treats -o as a directory and writes graph.png into it.
+          mise exec -- tuist graph --format png --no-open -o "$RUNNER_TEMP/tuist-graph"
+          cp "$RUNNER_TEMP/tuist-graph/graph.png" "$RUNNER_TEMP/tuist-graph.png"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: tuist-graph
