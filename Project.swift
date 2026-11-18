@@ -713,6 +713,13 @@ private let call = featureTarget(
         .target(name: "CallStats"),
         .target(name: "ServerAPI"),
         .target(name: "DesignSystem"),
+        // CallViewModel imports CallKitIntegration under #if os(iOS); the
+        // dependency was undeclared and only resolved implicitly against
+        // build products that earlier suites happened to leave in
+        // DerivedData — a cold coverage build (the CI coverage job runs the
+        // logic suites alone) failed with "No such module
+        // 'CallKitIntegration'" until it was declared (LNK-34 lesson).
+        .target(name: "CallKitIntegration"),
         .external(name: "WebRTC"),
     ],
     settings: featuresSettings
