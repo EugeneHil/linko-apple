@@ -76,6 +76,7 @@ jobs:
       - name: Coverage-enabled logic run with the 80 % gate
         run: COVERAGE_DIR="$RUNNER_TEMP/coverage" Scripts/ci-local.sh --coverage
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always() # the table is the point when the gate fails
         with:
           name: coverage-report
           path: ${{ runner.temp }}/coverage/coverage-report.txt

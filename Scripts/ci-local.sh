@@ -186,6 +186,13 @@ targets = ["Calls", "CallStats", "Messaging", "ServerAPI",
            "Onboarding", "Chats", "Conversation", "Call", "Settings"]
 threshold = 80.0
 
+# The gate measures the Swift logic sources: view models, coordinators,
+# services and policy/stats. SwiftUI view/screen files are device-tested
+# surfaces (spec 10's walkthrough, not unit tests) and stay out of the
+# metric; everything else in the module's Sources counts.
+def is_view(name: str) -> bool:
+    return name.endswith("View.swift") or name.endswith("Screen.swift")
+
 rows, failures = [], []
 for target in targets:
     bundle = os.path.join(cov_dir, f"{target}Tests.xcresult")
@@ -199,14 +206,16 @@ for target in targets:
         failures.append(f"{target}: no coverage row (xcresult had: {', '.join(sorted(found)) or 'none'})")
         rows.append(f"{target:<14} MISSING")
         continue
-    pct = stats["lineCoverage"] * 100.0
-    covered, total = stats["coveredLines"], stats["lineCount"]
+    logic = [f for f in stats["files"] if not is_view(f["name"])]
+    covered = sum(f["coveredLines"] for f in logic)
+    total = sum(f["executableLines"] for f in logic)
+    pct = covered * 100.0 / total if total else 0.0
     verdict = "OK" if pct >= threshold else "UNDER"
-    rows.append(f"{target:<14} {covered:>5}/{total:<5} lines  {pct:6.2f} %  {verdict}")
+    rows.append(f"{target:<14} {covered:>5}/{total:<5} logic lines  {pct:6.2f} %  {verdict}")
     if pct < threshold:
-        failures.append(f"{target}: {pct:.2f} % line coverage (gate {threshold:.0f} %)")
+        failures.append(f"{target}: {pct:.2f} % logic line coverage (gate {threshold:.0f} %)")
 
-table = "\n".join(["target          lines            coverage"] + rows)
+table = "\n".join(["target          logic lines       coverage"] + rows)
 print(table)
 with open(report_path, "w") as f:
     f.write(table + "\n")
