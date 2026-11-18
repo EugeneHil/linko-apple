@@ -41,6 +41,15 @@ log_dir=$(mktemp -d "${TMPDIR:-/tmp}/ci-local.XXXXXX")
 invoke_suite() {
   local scheme=$1 log=$2
   shift 2
+  # xcodebuild refuses to overwrite an existing -resultBundlePath; clear any
+  # leftover bundle so a retry attempt starts from a clean slate.
+  local arg
+  local -a remaining=("$@")
+  for arg in "${!remaining[@]}"; do
+    if [ "${remaining[$arg]}" = "-T" ] && [ "$((arg + 1))" -lt "${#remaining[@]}" ]; then
+      rm -rf "${remaining[$((arg + 1))]}"
+    fi
+  done
   # pipefail: the pipeline (and the if) fails when tuist test fails.
   if ! mise exec -- tuist test "$scheme" "$@" 2>&1 | tee "$log"; then
     echo "ci-local: 'tuist test $scheme' exited non-zero" >&2
