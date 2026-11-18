@@ -102,6 +102,13 @@ done
 echo "== Design tokens freshness"
 Scripts/check-tokens.sh
 
+echo "== tuist install"
+# Fetches the Tuist/Package.swift external dependencies (WebRTC, GRDB) into
+# the SwiftPM cache; without it a fresh checkout fails generate with "We
+# could not find external dependencies" (the first CI round did exactly
+# that). A resolved cache makes this a fast confirmation.
+mise exec -- tuist install
+
 echo "== tuist generate"
 mise exec -- tuist generate --no-open
 

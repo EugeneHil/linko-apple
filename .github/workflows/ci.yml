@@ -83,13 +83,14 @@ jobs:
           curl -sSfLo swiftformat.zip https://github.com/nicklockwood/SwiftFormat/releases/download/0.64.0/swiftformat_linux.zip
           echo "599eb5d2d8cf43e1128e79cd72f3bc2fec1b3189c3ac7593fbe732f2568fed36  swiftformat.zip" | sha256sum --check --strict
           unzip -o swiftformat.zip -d swiftformat-bin
-          install -v "$(find swiftformat-bin -type f -name swiftformat)" /usr/local/bin/swiftformat
+          # The release zip names the binary after the archive (swiftformat_linux).
+          install -v "$(find swiftformat-bin -type f -name 'swiftformat*')" /usr/local/bin/swiftformat
       - name: Install pinned SwiftLint 0.65.1 (checksum-verified Linux binary)
         run: |
           curl -sSfLo swiftlint.zip https://github.com/realm/SwiftLint/releases/download/0.65.1/swiftlint_linux_amd64.zip
           echo "caeed6f4a679c35539ffaf124f6c4ab4a8416917f7d8796279dc52b74026059d  swiftlint.zip" | sha256sum --check --strict
           unzip -o swiftlint.zip -d swiftlint-bin
-          install -v "$(find swiftlint-bin -type f -name swiftlint)" /usr/local/bin/swiftlint
+          install -v "$(find swiftlint-bin -type f -name 'swiftlint*')" /usr/local/bin/swiftlint
       - name: SwiftFormat --lint
         run: swiftformat --lint .
       - name: SwiftLint --strict
