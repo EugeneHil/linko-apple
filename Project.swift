@@ -438,6 +438,72 @@ private let callsMacTests = Target.target(
     settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
 )
 
+// Pure-Swift module (Plan 4 Task 10): the CallKit provider adapter, the audio
+// session coordinator (ADR-0001 options), the route-change monitor, the
+// foreground WebSocket invite source and the Mac incoming-call presenter.
+// Consumes Calls (CallReporting/IncomingCallSource/coordinator), Signaling
+// events, CoreBridge envelopes and CallEngine's ManualAudioControlling —
+// every dependency is declared explicitly (LNK-34 lesson), and explicit
+// modules are disabled because the target imports Signaling (the
+// Messaging/Calls precedent: the clang dependency scanner cannot consume
+// Signaling's framework modulemap).
+private let callKitIntegrationSettings = signingSettings
+    .merging(sharedSettings) { _, shared in shared }
+    .merging(["SWIFT_ENABLE_EXPLICIT_MODULES": "NO"]) { _, override in override }
+
+private let callKitIntegration = Target.target(
+    name: "CallKitIntegration",
+    destinations: [.iPhone, .mac],
+    product: .framework,
+    bundleId: "io.github.eugenehil.linko.CallKitIntegration",
+    deploymentTargets: .multiplatform(iOS: "18.0", macOS: "15.0"),
+    infoPlist: .default,
+    sources: ["Modules/CallKitIntegration/Sources/**"],
+    dependencies: [
+        .target(name: "CoreBridge"),
+        .target(name: "Signaling"),
+        .target(name: "Calls"),
+        .target(name: "CallEngine"),
+    ],
+    settings: .settings(base: callKitIntegrationSettings)
+)
+
+private let callKitIntegrationTests = Target.target(
+    name: "CallKitIntegrationTests",
+    destinations: [.iPhone],
+    product: .unitTests,
+    bundleId: "io.github.eugenehil.linko.CallKitIntegrationTests",
+    deploymentTargets: .iOS("18.0"),
+    infoPlist: .default,
+    sources: ["Modules/CallKitIntegration/Tests/**"],
+    dependencies: [
+        .target(name: "CallKitIntegration"),
+        .target(name: "CoreBridge"),
+        .target(name: "Signaling"),
+        .target(name: "Calls"),
+        .target(name: "CallEngine"),
+    ],
+    settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
+)
+
+private let callKitIntegrationMacTests = Target.target(
+    name: "CallKitIntegrationMacTests",
+    destinations: [.mac],
+    product: .unitTests,
+    bundleId: "io.github.eugenehil.linko.CallKitIntegrationMacTests",
+    deploymentTargets: .macOS("15.0"),
+    infoPlist: .default,
+    sources: ["Modules/CallKitIntegration/Tests/**"],
+    dependencies: [
+        .target(name: "CallKitIntegration"),
+        .target(name: "CoreBridge"),
+        .target(name: "Signaling"),
+        .target(name: "Calls"),
+        .target(name: "CallEngine"),
+    ],
+    settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
+)
+
 // Pure-Swift module (Plan 4 Task 11): P2P file transfer over the call's data
 // channel with ack framing and backpressure, plus the server transport
 // fallback. Consumes CoreBridge chunking (LKFileChunker/LKFileReassembler/
@@ -718,6 +784,9 @@ let project = Project(
         calls,
         callsTests,
         callsMacTests,
+        callKitIntegration,
+        callKitIntegrationTests,
+        callKitIntegrationMacTests,
         fileTransfer,
         fileTransferTests,
         fileTransferMacTests,
@@ -826,6 +895,17 @@ let project = Project(
             name: "CallsMacTests",
             buildAction: .buildAction(targets: ["CallsMacTests"]),
             testAction: .targets(["CallsMacTests"])
+        ),
+        // Same pattern for the CallKitIntegration test targets (Task 10).
+        .scheme(
+            name: "CallKitIntegrationTests",
+            buildAction: .buildAction(targets: ["CallKitIntegrationTests"]),
+            testAction: .targets(["CallKitIntegrationTests"])
+        ),
+        .scheme(
+            name: "CallKitIntegrationMacTests",
+            buildAction: .buildAction(targets: ["CallKitIntegrationMacTests"]),
+            testAction: .targets(["CallKitIntegrationMacTests"])
         ),
         // Same pattern for the FileTransfer test targets (Task 11).
         .scheme(

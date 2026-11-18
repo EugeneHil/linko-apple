@@ -85,6 +85,12 @@ mise exec -- tuist test CallsTests -- -destination "id=$ios_udid"
 echo "== Calls tests on macOS"
 mise exec -- tuist test CallsMacTests -- -destination "platform=macOS"
 
+echo "== CallKitIntegration tests on the iOS simulator ($ios_udid)"
+mise exec -- tuist test CallKitIntegrationTests -- -destination "id=$ios_udid"
+
+echo "== CallKitIntegration tests on macOS"
+mise exec -- tuist test CallKitIntegrationMacTests -- -destination "platform=macOS"
+
 echo "== FileTransfer tests on the iOS simulator ($ios_udid)"
 mise exec -- tuist test FileTransferTests -- -destination "id=$ios_udid"
 
