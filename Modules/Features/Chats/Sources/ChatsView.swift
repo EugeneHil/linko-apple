@@ -7,6 +7,10 @@ import SwiftUI
 
 public struct ChatsView: View {
     @State private var viewModel: ChatsViewModel
+    /// The row-tap callback (composition root, part 2 / LNK-39): when set,
+    /// each row becomes a button that hands over the peer. Nil keeps the
+    /// part-1 look-and-feel exactly.
+    public var onSelect: ((String) -> Void)?
 
     public init(viewModel: ChatsViewModel) {
         _viewModel = State(initialValue: viewModel)
@@ -19,14 +23,15 @@ public struct ChatsView: View {
                     Banner(message: "Offline — messages send when you are back")
                 }
                 List(viewModel.rows) { row in
-                    ChatRow(
-                        name: row.peer,
-                        preview: row.preview,
-                        timestamp: row.timestamp,
-                        unreadCount: row.unreadCount
-                    )
-                    .overlay(alignment: .topLeading) {
-                        PresenceDot(visible: row.online)
+                    if let onSelect {
+                        Button {
+                            onSelect(row.peer)
+                        } label: {
+                            rowLabel(row)
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        rowLabel(row)
                     }
                 }
                 .listStyle(.plain)
@@ -39,6 +44,18 @@ public struct ChatsView: View {
             .onDisappear {
                 viewModel.stop()
             }
+        }
+    }
+
+    private func rowLabel(_ row: ChatSummary) -> some View {
+        ChatRow(
+            name: row.peer,
+            preview: row.preview,
+            timestamp: row.timestamp,
+            unreadCount: row.unreadCount
+        )
+        .overlay(alignment: .topLeading) {
+            PresenceDot(visible: row.online)
         }
     }
 }

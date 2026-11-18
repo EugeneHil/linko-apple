@@ -59,8 +59,15 @@ final class CallTests: XCTestCase {
         XCTAssertEqual(context.engine.mutes, [true])
         XCTAssertTrue(context.viewModel.isMuted, "the tray's mute state flips with the action")
 
-        context.viewModel.toggleCamera()
-        XCTAssertFalse(context.viewModel.isCameraOn, "the camera flag flips locally (the engine exposes no video-enable surface yet — the part 2 gap)")
+        await context.viewModel.toggleCamera()
+        XCTAssertFalse(context.viewModel.isCameraOn, "the camera flag flips locally")
+        try await waitUntil("the engine's video toggle routes through the coordinator") {
+            context.engine.videoEnables == [false]
+        }
+        await context.viewModel.toggleCamera()
+        try await waitUntil("the re-enable reaches the engine") {
+            context.engine.videoEnables == [false, true]
+        }
 
         await context.viewModel.hangup()
         try await waitUntil("the hangup envelope is sent") {

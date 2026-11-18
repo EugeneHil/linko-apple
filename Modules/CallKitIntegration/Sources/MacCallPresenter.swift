@@ -104,7 +104,8 @@
         private var acceptAction: (@Sendable () async -> Void)?
         private var rejectAction: (@Sendable () async -> Void)?
 
-        override init() {
+        /// Constructible by the composition root (the presenter's window).
+        override public init() {
             super.init()
         }
 

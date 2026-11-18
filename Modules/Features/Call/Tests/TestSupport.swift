@@ -76,6 +76,7 @@ final class FakeCallEngine: CallMediaEngine, @unchecked Sendable {
     private let lock = NSLock()
     private var _prepared: [CallMedia] = []
     private var _mutes: [Bool] = []
+    private var _videoEnables: [Bool] = []
 
     init() {
         (iceCandidates, _) = AsyncStream.makeStream(of: IceCandidate.self, bufferingPolicy: .unbounded)
@@ -127,6 +128,10 @@ final class FakeCallEngine: CallMediaEngine, @unchecked Sendable {
         lock.withLock { _mutes.append(muted) }
     }
 
+    func setVideoEnabled(_ enabled: Bool) async {
+        lock.withLock { _videoEnables.append(enabled) }
+    }
+
     var localVideoTrack: (any VideoTrackHandle)? {
         get async { nil }
     }
@@ -143,6 +148,10 @@ final class FakeCallEngine: CallMediaEngine, @unchecked Sendable {
 
     var mutes: [Bool] {
         lock.withLock { _mutes }
+    }
+
+    var videoEnables: [Bool] {
+        lock.withLock { _videoEnables }
     }
 
     func fireConnectionState(_ state: IceConnectionState) {

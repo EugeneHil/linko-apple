@@ -239,6 +239,26 @@ public actor DefaultCallEngine: CallMediaEngine {
         audioTrack?.setEnabled(!muted)
     }
 
+    public func setVideoEnabled(_ enabled: Bool) async {
+        guard videoBundle != nil else {
+            logging.info("video toggle ignored: audio-only session")
+            return
+        }
+        localVideo?.renderable?.isEnabled = enabled
+        if enabled {
+            // Re-arm capture only where a camera exists; a refused restart
+            // leaves the call audio-only (the state surfaces through the
+            // connection stream, never through SDP).
+            if cameraAvailability.hasCamera {
+                try? await videoBundle?.capturer.startCapture()
+            }
+            logging.info("video capture resumed")
+        } else {
+            videoBundle?.capturer.stopCapture()
+            logging.info("video capture stopped")
+        }
+    }
+
     // MARK: Hangup
 
     public func hangup() async {

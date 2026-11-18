@@ -38,6 +38,14 @@ public final class OnboardingViewModel {
     private let configStore: SessionConfigStore
     private var link: InviteLink?
 
+    /// The parsed invite (composition root, part 2 / LNK-39): the bootstrap
+    /// transport reads the pin from here — the registration request's TLS
+    /// trust anchor is the submitted invite's pin, knowable only after the
+    /// user pastes the link.
+    public var parsedInvite: InviteLink? {
+        link
+    }
+
     public init(
         register: RegisterService,
         tokens: any TokenStoring,
@@ -84,6 +92,9 @@ public final class OnboardingViewModel {
                     username: session.user
                 )
             )
+            // The device id rides under its own defaults key (part 2 /
+            // LNK-39): every launch rebuilds the signaling client from it.
+            configStore.persistDeviceId(session.deviceId)
             phase = .registered
         } catch let error as RegisterError {
             phase = Self.phase(for: error)

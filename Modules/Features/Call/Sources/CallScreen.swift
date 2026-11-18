@@ -1,12 +1,11 @@
-// CallScreen (Plan 4 Task 13 part 1): the in-call surface (spec 4.7) —
-// remote video full screen, local preview top right, StatsOverlay top left
-// (hidden when Settings says off), CallControlsTray bottom (mute, camera
-// toggle, hangup; tray geometry from Task 3). All state lives in
-// CallViewModel; the view only maps it. The remote and local layers render
-// placeholders today: the engine's VideoTrackHandle has no platform
-// renderer binding yet — part 2 (composition) closes that gap with the
-// CallKit/Mac presenter wiring; no RTC plumbing invented in the feature
-// module.
+// CallScreen (Plan 4 Task 13 part 1, video binding in part 2 / LNK-39):
+// the in-call surface (spec 4.7) — remote video full screen (the engine's
+// remote track bound through VideoTrackView), local preview top right
+// (the local track bound the same way; the material frame stands for
+// audio-only or camera-off), StatsOverlay top left (hidden when Settings
+// says off), CallControlsTray bottom (mute, camera toggle, hangup; tray
+// geometry from Task 3). All state lives in CallViewModel; the view only
+// maps it.
 
 import Calls
 import DesignSystem
@@ -21,13 +20,18 @@ public struct CallScreen: View {
 
     public var body: some View {
         ZStack {
-            // The remote video layer (placeholder until part 2 binds the
-            // engine's VideoTrackHandle through a platform renderer).
+            // The remote video layer: the live track renders full-screen;
+            // without one (audio-only, between tracks) the black background
+            // and the caption stand.
             Color.black
+
+            if let handle = viewModel.remoteVideoTrack {
+                VideoTrackView(handle: handle)
+            }
 
             if viewModel.state.kind == .incomingRinging {
                 incomingCall
-            } else {
+            } else if viewModel.remoteVideoTrack == nil {
                 caption
             }
 
@@ -46,8 +50,11 @@ public struct CallScreen: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            if showsTray {
-                tray
+            VStack(spacing: LKTokens.Spacing.s4) {
+                if showsTray {
+                    audioRouteBar
+                    tray
+                }
             }
         }
         .task {
@@ -75,7 +82,7 @@ public struct CallScreen: View {
     }
 
     /// Who the call is with and where it stands — visible while no remote
-    /// video renders (the video surface is part 2's renderer binding).
+    /// video renders (the bound track replaces it).
     private var caption: some View {
         VStack(spacing: LKTokens.Spacing.s4) {
             if !viewModel.state.peer.isEmpty {
@@ -92,14 +99,22 @@ public struct CallScreen: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
-    /// The local camera preview layer (placeholder until part 2 binds the
-    /// engine's local VideoTrackHandle).
+    /// The local camera preview layer: the bound local track while the
+    /// camera is on; the material frame stands for camera-off (and for a
+    /// not-yet-bound track).
     private var localPreview: some View {
-        RoundedRectangle(cornerRadius: 12)
-            .fill(.ultraThinMaterial)
-            .frame(width: 120, height: 160)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-            .padding(LKTokens.Spacing.s16)
+        Group {
+            if viewModel.isCameraOn, let handle = viewModel.localVideoTrack {
+                VideoTrackView(handle: handle)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(.ultraThinMaterial)
+            }
+        }
+        .frame(width: 120, height: 160)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .padding(LKTokens.Spacing.s16)
     }
 
     private var tray: some View {
@@ -107,9 +122,39 @@ public struct CallScreen: View {
             isMuted: viewModel.isMuted,
             isCameraOn: viewModel.isCameraOn,
             onToggleMute: { Task { await viewModel.toggleMute() } },
-            onToggleCamera: { viewModel.toggleCamera() },
+            onToggleCamera: { Task { await viewModel.toggleCamera() } },
             onHangup: { Task { await viewModel.hangup() } }
         )
+    }
+
+    /// The in-call audio route surface (iOS only, spec §10 item 6): the
+    /// live output's name and the speaker override. macOS has no
+    /// AVAudioSession — the bar collapses to nothing there.
+    @ViewBuilder
+    private var audioRouteBar: some View {
+        #if os(iOS)
+            if viewModel.audioRouteName != nil || viewModel.isSpeakerOn {
+                HStack(spacing: LKTokens.Spacing.s8) {
+                    Image(systemName: "hifispeaker.2.fill")
+                        .font(.caption)
+                    Text(viewModel.audioRouteName ?? "Audio")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button {
+                        viewModel.toggleSpeaker()
+                    } label: {
+                        Image(systemName: viewModel.isSpeakerOn
+                            ? "speaker.wave.2.fill" : "speaker.wave.2")
+                            .font(.body)
+                    }
+                    .accessibilityLabel(viewModel.isSpeakerOn
+                        ? "Route audio to the earpiece" : "Route audio to the speaker")
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, LKTokens.Spacing.s16)
+            }
+        #endif
     }
 
     // MARK: - Mapping
