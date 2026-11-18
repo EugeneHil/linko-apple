@@ -18,9 +18,11 @@ powershell -ExecutionPolicy Bypass -File setup-turn.ps1 -PublicIp <vps-ip>
 
 What it does:
 
-- First run generates `turnserver.conf` with a 32-byte hex secret from a CSPRNG (hex, not Base64: no look-alike characters for the config parser). Reruns keep the existing secret. The config gets an owner-only ACL (Administrators and SYSTEM).
+- First run generates `turnserver.conf` with a 32-byte hex secret from a CSPRNG (hex, not Base64: no look-alike characters for the config parser). Reruns keep the existing secret. The config gets an owner-only ACL (Administrators and SYSTEM). This secret is the single source of truth: copy the same hex into the linko-server config's `turnSecret` (`linko-server/docs/deploy.md` §3) — copy-paste only, never retype.
 - Opens Windows Firewall rules: UDP 3478, TCP 3478, UDP 49160–49200 (inbound).
 - Starts `turnserver.exe` hidden. coturn on Windows does not resolve a drive-letter absolute path after `-c`, so the script passes the config name relative to the working directory.
+
+**No Windows service in v0.1.** `setup-turn.ps1` starts `turnserver.exe` inside the current RDP/SSH session and nothing registers it as a Windows service, so coturn dies when that session closes (the spike deliberately skipped persistence). Keep the session open for the whole scenario window and check `tasklist | findstr turnserver` before relying on TURN. Registering a proper `LinkoTurn` service (spec §8's "server and TURN registered as Windows services") is roadmap, not done here.
 
 Generated config (the options that mattered):
 
@@ -69,6 +71,6 @@ REST scheme, valid 1 h: `username = <unix-expiry>:spike`, `credential = base64(h
 
 ## 6. Teardown and security
 
-- The signaling relay (`relay.ps1`, port 9000) is spike-only: stop it and close port 9000 after testing. coturn may stay running as a service if the owner agrees.
+- The signaling relay (`relay.ps1`, port 9000) is spike-only: stop it and close port 9000 after testing. coturn keeps running only inside the session that started it — it is not registered as a Windows service in v0.1 (see §2).
 - `turnserver.conf` holds the shared secret: owner-only ACL, never copied off the VPS, never committed.
 - `no-tls` was acceptable for the spike; revisit TLS for the product.

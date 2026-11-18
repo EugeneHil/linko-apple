@@ -60,9 +60,12 @@ the iPhone.
       full screen, local preview top right, stats overlay top left and the
       controls tray at the bottom (mute, camera, hangup).
 - [ ] Two-way video and audio work on both sides.
-- [ ] The stats overlay shows the ICE candidate pair type `relay` (LTE via
-      TURN) plus live bitrate and RTT, with loss, jitter, fps, resolution
-      and codec (VP8 in v0.1). Screenshot with `relay` visible.
+- [ ] The stats overlay shows the ICE candidate pair plus live bitrate and
+      RTT, with loss, jitter, fps, resolution and codec (VP8 in v0.1). On
+      LTE the pair may be `relay` (via TURN) or a direct `host` pair — TURN
+      is the fallback path, not a requirement (the LNK-3 spike saw a direct
+      `host` pair on MTS LTE with relay-only off). Record which pair type
+      the overlay shows. Screenshot of the overlay.
 - [ ] Mac: the call view sits in the middle of the Mac window with the same
       overlay and tray; the conversation stays available as a sidebar during
       the call.
