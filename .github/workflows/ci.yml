@@ -99,8 +99,9 @@ jobs:
           curl -sSfLo swiftlint.zip https://github.com/realm/SwiftLint/releases/download/0.65.1/swiftlint_linux_amd64.zip
           echo "caeed6f4a679c35539ffaf124f6c4ab4a8416917f7d8796279dc52b74026059d  swiftlint.zip" | sha256sum --check --strict
           unzip -o swiftlint.zip -d swiftlint-bin
-          # The zip ships the launcher plus a redundant swiftlint-static copy.
-          install -v "$(find swiftlint-bin -type f -name 'swiftlint')" /usr/local/bin/swiftlint
+          # Install the static build: the launcher needs libxml2.so.2, which
+          # the ubuntu runner does not ship (round-4 incident).
+          install -v "$(find swiftlint-bin -type f -name 'swiftlint-static')" /usr/local/bin/swiftlint
       - name: SwiftFormat --lint
         run: swiftformat --lint .
       - name: SwiftLint --strict

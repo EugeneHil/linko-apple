@@ -35,18 +35,20 @@ cd "$repo"
 # deletes them at the end.
 log_dir=$(mktemp -d "${TMPDIR:-/tmp}/ci-local.XXXXXX")
 
-run_suite() {
-  local scheme=$1
-  shift
-  local log="$log_dir/$scheme.log"
+# One tuist test invocation plus the hollow-gate checks on its captured
+# output; returns non-zero when the invocation failed or the checks fired
+# (messages go to stderr). The caller decides between the retry and failing.
+invoke_suite() {
+  local scheme=$1 log=$2
+  shift 2
   # pipefail: the pipeline (and the if) fails when tuist test fails.
   if ! mise exec -- tuist test "$scheme" "$@" 2>&1 | tee "$log"; then
-    echo "ci-local: FAIL: 'tuist test $scheme' exited non-zero (log: $log)" >&2
-    exit 1
+    echo "ci-local: 'tuist test $scheme' exited non-zero" >&2
+    return 1
   fi
   if grep -q "no tests to run" "$log"; then
-    echo "ci-local: HOLLOW GATE: $scheme ran no tests (\"no tests to run\") (log: $log)" >&2
-    exit 1
+    echo "ci-local: HOLLOW GATE: $scheme ran no tests (\"no tests to run\")" >&2
+    return 1
   fi
   # The last summary line is the final "All tests" verdict, e.g.
   # "Executed 12 tests, with 0 failures (0 unexpected) in 3.4 (12.3) seconds"
@@ -56,25 +58,46 @@ run_suite() {
   local executed
   executed=$(grep -E "Executed [0-9]+ tests?, with .* failures?" "$log" | tail -n 1 || true)
   if [ -z "$executed" ]; then
-    echo "ci-local: NO EXECUTION EVIDENCE: $scheme printed no 'Executed N tests' summary (log: $log)" >&2
-    exit 1
+    echo "ci-local: NO EXECUTION EVIDENCE: $scheme printed no 'Executed N tests' summary" >&2
+    return 1
   fi
   local count failures
   count=$(printf '%s' "$executed" | sed -nE 's/.*Executed ([0-9]+) tests?, with .*/\1/p')
   failures=$(printf '%s' "$executed" | sed -nE 's/.* ([0-9]+) failures?.*/\1/p')
   if [ -z "$count" ] || [ "$count" -eq 0 ]; then
     echo "ci-local: HOLLOW GATE: $scheme executed no tests ($executed)" >&2
-    exit 1
+    return 1
   fi
   if [ -z "$failures" ]; then
     echo "ci-local: FAIL: $scheme — unparseable summary line: $executed" >&2
-    exit 1
+    return 1
   fi
   if [ "$failures" -ne 0 ]; then
     echo "ci-local: FAIL: $scheme — $executed" >&2
-    exit 1
+    return 1
   fi
-  printf 'ci-local: %s: %s\n' "$scheme" "$executed"
+  return 0
+}
+
+run_suite() {
+  local scheme=$1
+  shift
+  local log="$log_dir/$scheme.log"
+  local attempt=1
+  while true; do
+    if invoke_suite "$scheme" "$log" "$@"; then
+      printf 'ci-local: %s: %s\n' "$scheme" "$(grep -E "Executed [0-9]+ tests?, with .* failures?" "$log" | tail -n 1)"
+      return 0
+    fi
+    if [ "$attempt" -ge 2 ]; then
+      echo "ci-local: FAIL: $scheme failed twice (log: $log)" >&2
+      exit 1
+    fi
+    attempt=$((attempt + 1))
+    echo "ci-local: $scheme failed; retrying once after cleaning the Tuist cache (tuist 4.212.0's test-time regeneration is flaky: empty test actions, dropped dependency edges)" >&2
+    rm -rf ~/.cache/tuist
+    mise exec -- tuist generate --no-open
+  done
 }
 
 pick_ios_simulator() {
@@ -115,6 +138,14 @@ echo "== Design tokens freshness"
 Scripts/check-tokens.sh
 
 echo "== tuist install"
+# Delete the regenerable Tuist cache first: tuist 4.212.0's test-time
+# regeneration ("Generating project for testing") reuses stale cache state
+# when a previous test session warmed it, and then produces schemes whose
+# test actions have no test targets — the exact hollow gate this script
+# guards against (reproduced locally right after prior test sessions, with
+# or without them ending cleanly). The real build products live in
+# DerivedData, so the only cost is a ~1 s regeneration.
+rm -rf ~/.cache/tuist
 # Fetches the Tuist/Package.swift external dependencies (WebRTC, GRDB) into
 # the SwiftPM cache; without it a fresh checkout fails generate with "We
 # could not find external dependencies" (the first CI round did exactly
@@ -161,7 +192,9 @@ for target in targets:
     raw = subprocess.run(["xcrun", "xccov", "view", "--report", "--json", bundle],
                          capture_output=True, text=True, check=True).stdout
     found = {t["name"]: t for t in json.loads(raw)["targets"]}
-    stats = found.get(target)
+    # xccov reports targets as "<Target>.framework"; fall back to the bare
+    # name. Exact candidates keep "Call" from matching "Calls.framework".
+    stats = found.get(f"{target}.framework") or found.get(target)
     if stats is None:
         failures.append(f"{target}: no coverage row (xcresult had: {', '.join(sorted(found)) or 'none'})")
         rows.append(f"{target:<14} MISSING")
