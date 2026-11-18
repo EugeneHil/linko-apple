@@ -49,16 +49,19 @@ run_suite() {
     exit 1
   fi
   # The last summary line is the final "All tests" verdict, e.g.
-  # "Executed 12 tests, with 0 failures (0 unexpected) in 3.4 (12.3) seconds".
+  # "Executed 12 tests, with 0 failures (0 unexpected) in 3.4 (12.3) seconds"
+  # or, when the suite skips tests, "Executed 4 tests, with 1 test skipped
+  # and 0 failures (0 unexpected)". The failures count is the number right
+  # before the last "failures"/"failure" word on the line.
   local executed
-  executed=$(grep -E "Executed [0-9]+ tests?, with [0-9]+ failures?" "$log" | tail -n 1 || true)
+  executed=$(grep -E "Executed [0-9]+ tests?, with .* failures?" "$log" | tail -n 1 || true)
   if [ -z "$executed" ]; then
     echo "ci-local: NO EXECUTION EVIDENCE: $scheme printed no 'Executed N tests' summary (log: $log)" >&2
     exit 1
   fi
   local count failures
   count=$(printf '%s' "$executed" | sed -nE 's/.*Executed ([0-9]+) tests?, with .*/\1/p')
-  failures=$(printf '%s' "$executed" | sed -nE 's/.*, with ([0-9]+) failures?.*/\1/p')
+  failures=$(printf '%s' "$executed" | sed -nE 's/.* ([0-9]+) failures?.*/\1/p')
   if [ -z "$count" ] || [ "$count" -eq 0 ]; then
     echo "ci-local: HOLLOW GATE: $scheme executed no tests ($executed)" >&2
     exit 1
