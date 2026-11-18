@@ -66,6 +66,12 @@ public protocol CallMediaEngine: Sendable {
     /// Mutes/unmutes the local audio track.
     func setMuted(_ muted: Bool) async
 
+    /// Enables/disables the local camera for the current video call: the
+    /// track stops being sent and capture stops (re-enabled on demand).
+    /// A no-op for audio-only sessions (Task 13 part 2's tray camera
+    /// toggle routes here).
+    func setVideoEnabled(_ enabled: Bool) async
+
     /// The local video track for the UI preview; nil for audio-only calls.
     var localVideoTrack: (any VideoTrackHandle)? { get async }
 

@@ -210,6 +210,24 @@ public final class CallCoordinator {
         await engine.setMuted(muted)
     }
 
+    /// Enables/disables the local camera for the current call (Task 13
+    /// part 2: the call tray's camera toggle routes through here).
+    public func setVideoEnabled(_ enabled: Bool) async {
+        await engine.setVideoEnabled(enabled)
+    }
+
+    /// The engine's local video track handle (the camera preview binding);
+    /// nil for audio-only sessions and between calls.
+    public func localVideoTrack() async -> (any VideoTrackHandle)? {
+        await engine.localVideoTrack
+    }
+
+    /// The engine's remote video track handle (the full-screen surface
+    /// binding); nil for audio-only sessions and between calls.
+    public func remoteVideoTrack() async -> (any VideoTrackHandle)? {
+        await engine.remoteVideoTrack
+    }
+
     // MARK: - Machine application
 
     /// The funnel: every machine input goes through here. Applies the event,

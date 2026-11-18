@@ -128,4 +128,13 @@ mise exec -- tuist test CallTests -- -destination "id=$ios_udid"
 echo "== Call tests on macOS"
 mise exec -- tuist test CallMacTests -- -destination "platform=macOS"
 
+# Task 13 part 2 (LNK-39): the app smoke targets — the launch smoke boots
+# the real apps on the simulator / macOS, the composition smoke builds the
+# full session graph.
+echo "== LinkoiOS smoke tests on the iOS simulator ($ios_udid)"
+mise exec -- tuist test LinkoiOSTests -- -destination "id=$ios_udid"
+
+echo "== LinkoMac smoke tests on macOS"
+mise exec -- tuist test LinkoMacTests -- -destination "platform=macOS"
+
 echo "ci-local: OK"

@@ -53,6 +53,11 @@ public struct UserDefaultsWriter: DefaultsWriting, @unchecked Sendable {
 
 public struct SessionConfigStore: Sendable {
     public static let storageKey = "io.github.eugenehil.linko.session-config"
+    /// The device id under its own defaults key (part 2 / LNK-39): the
+    /// registration's `Session.deviceId`, needed at every launch to build
+    /// the SignalingClient and the Settings screen. Non-secret; the token
+    /// stays in the Keychain (Review Focus 5).
+    public static let deviceIdKey = "io.github.eugenehil.linko.device-id"
 
     private let defaults: any DefaultsWriting
 
@@ -74,5 +79,20 @@ public struct SessionConfigStore: Sendable {
 
     public func clear() {
         defaults.removeObject(forKey: Self.storageKey)
+    }
+
+    /// Persists the decimal device id from `Session.deviceId` at
+    /// onboarding; loaded again at every launch.
+    public func persistDeviceId(_ id: Int64) {
+        defaults.setData(Data(String(id).utf8), forKey: Self.deviceIdKey)
+    }
+
+    /// Fail-soft: a missing or corrupt entry reads as nil (the app then
+    /// cannot build the signaling graph and stays on onboarding).
+    public func loadDeviceId() -> String? {
+        guard let data = defaults.data(forKey: Self.deviceIdKey) else {
+            return nil
+        }
+        return String(data: data, encoding: .utf8)
     }
 }

@@ -20,25 +20,80 @@ private let signingSettings: SettingsDictionary = [
     "CODE_SIGN_STYLE": "Automatic",
 ]
 
+// The iOS app (Task 13 part 2, LNK-39): the composed root — one session
+// graph (engine, signaling, coordinator) with the feature modules on top.
+// The usage descriptions and background modes match the surfaces the
+// modules actually touch (camera/mic capture, LAN reachability, CallKit
+// voip + background audio).
 private let iosApp = Target.target(
     name: "LinkoiOS",
     destinations: [.iPhone],
     product: .app,
     bundleId: "io.github.eugenehil.linko",
     deploymentTargets: .iOS("18.0"),
-    infoPlist: .default,
-    sources: ["Apps/LinkoiOS/**"],
+    infoPlist: .extendingDefault(with: [
+        "NSCameraUsageDescription": "Linko uses the camera for video calls.",
+        "NSMicrophoneUsageDescription": "Linko uses the microphone for calls.",
+        "NSLocalNetworkUsageDescription": "Linko connects to your Linko server on the local network.",
+        "UIBackgroundModes": ["audio", "voip"],
+    ]),
+    sources: ["Apps/LinkoiOS/**", "Apps/Shared/**"],
+    dependencies: [
+        .target(name: "CallKitIntegration"),
+        .target(name: "Call"),
+        .target(name: "Chats"),
+        .target(name: "Conversation"),
+        .target(name: "Onboarding"),
+        .target(name: "Settings"),
+        .target(name: "Calls"),
+        .target(name: "CallEngine"),
+        .target(name: "CallStats"),
+        .target(name: "FileTransfer"),
+        .target(name: "Messaging"),
+        .target(name: "ServerAPI"),
+        .target(name: "Signaling"),
+        .target(name: "DesignSystem"),
+        .target(name: "CoreBridge"),
+    ],
     settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
 )
 
+// The macOS app (Task 13 part 2, LNK-39): the composed root with
+// MacCallPresenter reporting. Entitlements follow the ADR-0001 spike:
+// sandbox off, camera + microphone access, hardened runtime off.
 private let macApp = Target.target(
     name: "LinkoMac",
     destinations: [.mac],
     product: .app,
     bundleId: "io.github.eugenehil.linko.mac",
     deploymentTargets: .macOS("15.0"),
-    infoPlist: .default,
-    sources: ["Apps/LinkoMac/**"],
+    infoPlist: .extendingDefault(with: [
+        "NSCameraUsageDescription": "Linko uses the camera for video calls.",
+        "NSMicrophoneUsageDescription": "Linko uses the microphone for calls.",
+    ]),
+    sources: ["Apps/LinkoMac/**", "Apps/Shared/**"],
+    entitlements: .dictionary([
+        "com.apple.security.app-sandbox": .boolean(false),
+        "com.apple.security.device.audio-input": .boolean(true),
+        "com.apple.security.device.camera": .boolean(true),
+    ]),
+    dependencies: [
+        .target(name: "CallKitIntegration"),
+        .target(name: "Call"),
+        .target(name: "Chats"),
+        .target(name: "Conversation"),
+        .target(name: "Onboarding"),
+        .target(name: "Settings"),
+        .target(name: "Calls"),
+        .target(name: "CallEngine"),
+        .target(name: "CallStats"),
+        .target(name: "FileTransfer"),
+        .target(name: "Messaging"),
+        .target(name: "ServerAPI"),
+        .target(name: "Signaling"),
+        .target(name: "DesignSystem"),
+        .target(name: "CoreBridge"),
+    ],
     settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
 )
 
@@ -654,9 +709,11 @@ private let call = featureTarget(
     name: "Call",
     dependencies: [
         .target(name: "Calls"),
+        .target(name: "CallEngine"),
         .target(name: "CallStats"),
         .target(name: "ServerAPI"),
         .target(name: "DesignSystem"),
+        .external(name: "WebRTC"),
     ],
     settings: featuresSettings
 )
@@ -755,6 +812,34 @@ private let callMacTests = featureTestsTarget(
     ]
 )
 
+// The app smoke targets (Task 13 part 2, LNK-39): unit test bundles hosted
+// by the app targets — the launch smoke actually boots both apps (the host
+// seeds a synthetic session under the test host), the composition smoke
+// builds the full graph over the real composition root.
+private let iosAppTests = Target.target(
+    name: "LinkoiOSTests",
+    destinations: [.iPhone],
+    product: .unitTests,
+    bundleId: "io.github.eugenehil.linko.LinkoiOSTests",
+    deploymentTargets: .iOS("18.0"),
+    infoPlist: .default,
+    sources: ["Apps/LinkoiOSTests/**"],
+    dependencies: [.target(name: "LinkoiOS")],
+    settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
+)
+
+private let macAppTests = Target.target(
+    name: "LinkoMacTests",
+    destinations: [.mac],
+    product: .unitTests,
+    bundleId: "io.github.eugenehil.linko.LinkoMacTests",
+    deploymentTargets: .macOS("15.0"),
+    infoPlist: .default,
+    sources: ["Apps/LinkoMacTests/**"],
+    dependencies: [.target(name: "LinkoMac")],
+    settings: .settings(base: signingSettings.merging(sharedSettings) { _, shared in shared })
+)
+
 let project = Project(
     name: "Linko",
     targets: [
@@ -805,6 +890,8 @@ let project = Project(
         settingsMacTests,
         callTests,
         callMacTests,
+        iosAppTests,
+        macAppTests,
     ],
     schemes: [
         // One scheme per CoreBridge test target so both platforms can be
@@ -969,6 +1056,18 @@ let project = Project(
             name: "CallMacTests",
             buildAction: .buildAction(targets: ["CallMacTests"]),
             testAction: .targets(["CallMacTests"])
+        ),
+        // The app smoke schemes (Task 13 part 2): the test host boots the
+        // real app on the simulator / macOS.
+        .scheme(
+            name: "LinkoiOSTests",
+            buildAction: .buildAction(targets: ["LinkoiOSTests"]),
+            testAction: .targets(["LinkoiOSTests"])
+        ),
+        .scheme(
+            name: "LinkoMacTests",
+            buildAction: .buildAction(targets: ["LinkoMacTests"]),
+            testAction: .targets(["LinkoMacTests"])
         ),
     ]
 )

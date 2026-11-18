@@ -52,6 +52,7 @@ final class FakeCallEngine: CallMediaEngine, @unchecked Sendable {
     private var _channelSends: [Data] = []
     private var _bitratePlans: [BitratePlan] = []
     private var _mutes: [Bool] = []
+    private var _videoEnables: [Bool] = []
 
     struct RecordedSDP: Equatable, Sendable {
         let sdp: String
@@ -120,6 +121,10 @@ final class FakeCallEngine: CallMediaEngine, @unchecked Sendable {
         lock.withLock { _mutes.append(muted) }
     }
 
+    func setVideoEnabled(_ enabled: Bool) async {
+        lock.withLock { _videoEnables.append(enabled) }
+    }
+
     var localVideoTrack: (any VideoTrackHandle)? {
         get async { nil }
     }
@@ -168,6 +173,10 @@ final class FakeCallEngine: CallMediaEngine, @unchecked Sendable {
 
     var mutes: [Bool] {
         lock.withLock { _mutes }
+    }
+
+    var videoEnables: [Bool] {
+        lock.withLock { _videoEnables }
     }
 
     /// Fires what the live peer connection adapter would stream.
