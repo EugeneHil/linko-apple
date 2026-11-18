@@ -26,6 +26,11 @@ jobs:
   macos:
     runs-on: macos-latest
     timeout-minutes: 90
+    env:
+      # The runner holds no "Mac Development" identity for the Personal Team
+      # pinned in Project.swift; the macOS test builds run unsigned (see
+      # Scripts/ci-local.sh run_macos_suite).
+      MACOS_SIGNING: CODE_SIGNING_ALLOWED=NO
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -51,6 +56,10 @@ jobs:
   coverage:
     runs-on: macos-latest
     timeout-minutes: 90
+    env:
+      # Same no-signature rule as the macos job (only iOS simulator suites
+      # run here, the setting just keeps any incidental macOS build unsigned).
+      MACOS_SIGNING: CODE_SIGNING_ALLOWED=NO
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -84,13 +93,14 @@ jobs:
           echo "599eb5d2d8cf43e1128e79cd72f3bc2fec1b3189c3ac7593fbe732f2568fed36  swiftformat.zip" | sha256sum --check --strict
           unzip -o swiftformat.zip -d swiftformat-bin
           # The release zip names the binary after the archive (swiftformat_linux).
-          install -v "$(find swiftformat-bin -type f -name 'swiftformat*')" /usr/local/bin/swiftformat
+          install -v "$(find swiftformat-bin -type f -name 'swiftformat_linux')" /usr/local/bin/swiftformat
       - name: Install pinned SwiftLint 0.65.1 (checksum-verified Linux binary)
         run: |
           curl -sSfLo swiftlint.zip https://github.com/realm/SwiftLint/releases/download/0.65.1/swiftlint_linux_amd64.zip
           echo "caeed6f4a679c35539ffaf124f6c4ab4a8416917f7d8796279dc52b74026059d  swiftlint.zip" | sha256sum --check --strict
           unzip -o swiftlint.zip -d swiftlint-bin
-          install -v "$(find swiftlint-bin -type f -name 'swiftlint*')" /usr/local/bin/swiftlint
+          # The zip ships the launcher plus a redundant swiftlint-static copy.
+          install -v "$(find swiftlint-bin -type f -name 'swiftlint')" /usr/local/bin/swiftlint
       - name: SwiftFormat --lint
         run: swiftformat --lint .
       - name: SwiftLint --strict
@@ -104,4 +114,4 @@ jobs:
         with:
           submodules: recursive
       - name: Design-token freshness (external/linko-core generator --check)
-        run: python3 Scripts/check-tokens.sh
+        run: Scripts/check-tokens.sh

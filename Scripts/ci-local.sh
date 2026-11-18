@@ -89,6 +89,15 @@ pick_ios_simulator() {
   fi
 }
 
+run_macos_suite() {
+  # MACOS_SIGNING escape hatch for the CI runners: they hold no "Mac
+  # Development" identity for the Personal Team pinned in Project.swift, so
+  # the CI jobs export MACOS_SIGNING="CODE_SIGNING_ALLOWED=NO" and the macOS
+  # test builds run unsigned. Locally the default keeps the signed build the
+  # LinkoMac smoke test boots.
+  run_suite "$1" -- -destination "platform=macOS" ${MACOS_SIGNING:-}
+}
+
 coverage_mode=false
 no_lint=false
 for arg in "$@"; do
@@ -194,92 +203,92 @@ echo "== CoreBridge tests on the iOS simulator ($ios_udid)"
 run_suite CoreBridgeTests -- -destination "id=$ios_udid"
 
 echo "== CoreBridge tests on macOS"
-run_suite CoreBridgeMacTests -- -destination "platform=macOS"
+run_macos_suite CoreBridgeMacTests
 
 echo "== DesignSystem tests on the iOS simulator ($ios_udid)"
 run_suite DesignSystemTests -- -destination "id=$ios_udid"
 
 echo "== DesignSystem tests on macOS"
-run_suite DesignSystemMacTests -- -destination "platform=macOS"
+run_macos_suite DesignSystemMacTests
 
 echo "== Messaging tests on the iOS simulator ($ios_udid)"
 run_suite MessagingTests -- -destination "id=$ios_udid"
 
 echo "== Messaging tests on macOS"
-run_suite MessagingMacTests -- -destination "platform=macOS"
+run_macos_suite MessagingMacTests
 
 echo "== Signaling tests on the iOS simulator ($ios_udid)"
 run_suite SignalingTests -- -destination "id=$ios_udid"
 
 echo "== Signaling tests on macOS"
-run_suite SignalingMacTests -- -destination "platform=macOS"
+run_macos_suite SignalingMacTests
 
 echo "== ServerAPI tests on the iOS simulator ($ios_udid)"
 run_suite ServerAPITests -- -destination "id=$ios_udid"
 
 echo "== ServerAPI tests on macOS"
-run_suite ServerAPIMacTests -- -destination "platform=macOS"
+run_macos_suite ServerAPIMacTests
 
 echo "== CallEngine tests on the iOS simulator ($ios_udid)"
 run_suite CallEngineTests -- -destination "id=$ios_udid"
 
 echo "== CallEngine tests on macOS"
-run_suite CallEngineMacTests -- -destination "platform=macOS"
+run_macos_suite CallEngineMacTests
 
 echo "== CallStats tests on the iOS simulator ($ios_udid)"
 run_suite CallStatsTests -- -destination "id=$ios_udid"
 
 echo "== CallStats tests on macOS"
-run_suite CallStatsMacTests -- -destination "platform=macOS"
+run_macos_suite CallStatsMacTests
 
 echo "== Calls tests on the iOS simulator ($ios_udid)"
 run_suite CallsTests -- -destination "id=$ios_udid"
 
 echo "== Calls tests on macOS"
-run_suite CallsMacTests -- -destination "platform=macOS"
+run_macos_suite CallsMacTests
 
 echo "== CallKitIntegration tests on the iOS simulator ($ios_udid)"
 run_suite CallKitIntegrationTests -- -destination "id=$ios_udid"
 
 echo "== CallKitIntegration tests on macOS"
-run_suite CallKitIntegrationMacTests -- -destination "platform=macOS"
+run_macos_suite CallKitIntegrationMacTests
 
 echo "== FileTransfer tests on the iOS simulator ($ios_udid)"
 run_suite FileTransferTests -- -destination "id=$ios_udid"
 
 echo "== FileTransfer tests on macOS"
-run_suite FileTransferMacTests -- -destination "platform=macOS"
+run_macos_suite FileTransferMacTests
 
 echo "== Onboarding tests on the iOS simulator ($ios_udid)"
 run_suite OnboardingTests -- -destination "id=$ios_udid"
 
 echo "== Onboarding tests on macOS"
-run_suite OnboardingMacTests -- -destination "platform=macOS"
+run_macos_suite OnboardingMacTests
 
 echo "== Chats tests on the iOS simulator ($ios_udid)"
 run_suite ChatsTests -- -destination "id=$ios_udid"
 
 echo "== Chats tests on macOS"
-run_suite ChatsMacTests -- -destination "platform=macOS"
+run_macos_suite ChatsMacTests
 
 echo "== Conversation tests on the iOS simulator ($ios_udid)"
 run_suite ConversationTests -- -destination "id=$ios_udid"
 
 echo "== Conversation tests on macOS"
-run_suite ConversationMacTests -- -destination "platform=macOS"
+run_macos_suite ConversationMacTests
 
 echo "== Settings tests on the iOS simulator ($ios_udid)"
 run_suite SettingsTests -- -destination "id=$ios_udid"
 
 echo "== Settings tests on macOS"
-run_suite SettingsMacTests -- -destination "platform=macOS"
+run_macos_suite SettingsMacTests
 
 # Task 13 part 1 (LNK-39): the Call feature module.
 echo "== Call tests on the iOS simulator ($ios_udid)"
 run_suite CallTests -- -destination "id=$ios_udid"
 
 echo "== Call tests on macOS"
-run_suite CallMacTests -- -destination "platform=macOS"
+run_macos_suite CallMacTests
 
 # Task 13 part 2 (LNK-39): the app smoke targets — the launch smoke boots
 # the real apps on the simulator / macOS, the composition smoke builds the
@@ -288,7 +297,7 @@ echo "== LinkoiOS smoke tests on the iOS simulator ($ios_udid)"
 run_suite LinkoiOSTests -- -destination "id=$ios_udid"
 
 echo "== LinkoMac smoke tests on macOS"
-run_suite LinkoMacTests -- -destination "platform=macOS"
+run_macos_suite LinkoMacTests
 
 rm -rf "$log_dir"
 echo "ci-local: OK"
