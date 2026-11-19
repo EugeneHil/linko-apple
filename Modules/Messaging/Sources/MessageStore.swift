@@ -1,10 +1,15 @@
 // MessageStore (Plan 4 Task 6): the GRDB (SQLite, WAL) persistence for one
 // device's messages and receipt watermarks. Appends are idempotent by
 // message id (the first record wins — idempotent sends), history is
-// seq-ordered, receipts are monotonic watermarks (read implies delivered,
-// lower marks are ignored), and gap detection is delegated to the core's
-// ConversationHistory.hasGapAfter — the store never invents sync semantics
-// of its own. Message bodies are never logged.
+// seq-ordered, and receipts are two independent monotonic watermark sets
+// (lower marks are ignored): the PEER's delivered/read progress on this
+// device's outgoing messages (advanced by the peer's acks) and this
+// device's own read progress on incoming messages (advanced by open()).
+// Sharing one watermark between the directions marked the sender's own
+// messages as read — the rehearsal's 5th finding. Gap detection is
+// delegated to the core's ConversationHistory.hasGapAfter — the store
+// never invents sync semantics of its own. Message bodies are never
+// logged.
 
 import CoreBridge
 import Foundation
@@ -60,8 +65,10 @@ public struct StoredMessage: Equatable, Sendable {
     }
 }
 
-/// Receipt snapshot for one stored message (mirrors the core's
-/// LKReceiptState).
+/// The peer's receipt snapshot for one of this device's OUTGOING messages
+/// (mirrors the core's LKReceiptState) — the Sent/Delivered/Read line
+/// under an outgoing bubble. The incoming direction's progress is
+/// `myReadSeq(conversation:)`.
 public struct ReceiptState: Equatable, Sendable {
     public let delivered: Bool
     public let read: Bool
@@ -85,8 +92,9 @@ public actor MessageStore {
         ON messages (conversation, seq);
     CREATE TABLE IF NOT EXISTS conversation_receipts (
         conversation TEXT PRIMARY KEY NOT NULL,
-        delivered_seq INTEGER NOT NULL DEFAULT 0,
-        read_seq INTEGER NOT NULL DEFAULT 0
+        peer_delivered_seq INTEGER NOT NULL DEFAULT 0,
+        peer_read_seq INTEGER NOT NULL DEFAULT 0,
+        my_read_seq INTEGER NOT NULL DEFAULT 0
     );
     """
 
@@ -101,6 +109,21 @@ public actor MessageStore {
         try queue.writeWithoutTransaction { db in
             if path != nil {
                 try db.execute(sql: "PRAGMA journal_mode=WAL")
+            }
+            // Pre-split databases kept ONE read watermark per conversation
+            // for both directions — the false-Read bug's data model. The
+            // mixed values cannot be told apart from pollution, and
+            // receipts are ephemeral (peer receipts re-derive from the
+            // peer's next acks, my-read from the next open): stale tables
+            // are dropped before the schema creates the split shape.
+            if try db.tableExists("conversation_receipts") {
+                let names = try Set(db.columns(in: "conversation_receipts").map(\.name))
+                let expected: Set = [
+                    "conversation", "peer_delivered_seq", "peer_read_seq", "my_read_seq"
+                ]
+                if names != expected {
+                    try db.execute(sql: "DROP TABLE conversation_receipts")
+                }
             }
             for statement in Self.schema.split(separator: ";") {
                 try db.execute(sql: String(statement))
@@ -189,20 +212,42 @@ public actor MessageStore {
         return boundary
     }
 
-    /// Advances the delivered watermark; lower values are ignored.
-    public func markDelivered(conversation: String, uptoSeq: Int64) {
-        mark(conversation: conversation, uptoSeq: uptoSeq, isRead: false)
-    }
-
-    /// Advances the read watermark (and delivered with it); lower values
+    /// Advances the PEER's delivered watermark (msg.ack-delivered from the
+    /// peer: they received this device's outgoing messages); lower values
     /// are ignored.
-    public func markRead(conversation: String, uptoSeq: Int64) {
-        mark(conversation: conversation, uptoSeq: uptoSeq, isRead: true)
+    public func markPeerDelivered(conversation: String, uptoSeq: Int64) {
+        markPeer(conversation: conversation, uptoSeq: uptoSeq, isRead: false)
     }
 
-    /// The receipt snapshot for the stored message with `messageId`; nil
-    /// when no such message exists.
-    public func receipt(messageId: String) -> ReceiptState? {
+    /// Advances the PEER's read watermark (msg.ack-read: they read this
+    /// device's outgoing messages), delivered along with it; lower values
+    /// are ignored. Never touches this device's own read watermark.
+    public func markPeerRead(conversation: String, uptoSeq: Int64) {
+        markPeer(conversation: conversation, uptoSeq: uptoSeq, isRead: true)
+    }
+
+    /// Advances this device's own read watermark for the conversation's
+    /// INCOMING messages (the conversation was opened); lower values are
+    /// ignored. Never touches the peer's receipt watermarks — the two
+    /// progress marks are independent.
+    public func markMyRead(conversation: String, uptoSeq: Int64) {
+        _ = try? queue.write { db in
+            try db.execute(
+                sql: """
+                INSERT INTO conversation_receipts
+                    (conversation, peer_delivered_seq, peer_read_seq, my_read_seq)
+                VALUES (?, 0, 0, ?)
+                ON CONFLICT(conversation) DO UPDATE SET
+                    my_read_seq = MAX(my_read_seq, excluded.my_read_seq)
+                """,
+                arguments: [conversation, uptoSeq]
+            )
+        }
+    }
+
+    /// The peer's receipt snapshot for the OUTGOING stored message with
+    /// `messageId`; nil when no such message exists.
+    public func peerReceipt(messageId: String) -> ReceiptState? {
         struct Snapshot {
             let seq: Int64
             let deliveredSeq: Int64
@@ -215,8 +260,8 @@ public actor MessageStore {
                 db,
                 sql: """
                 SELECT m.seq AS seq,
-                       COALESCE(c.delivered_seq, 0) AS delivered_seq,
-                       COALESCE(c.read_seq, 0) AS read_seq
+                       COALESCE(c.peer_delivered_seq, 0) AS delivered_seq,
+                       COALESCE(c.peer_read_seq, 0) AS read_seq
                 FROM messages m
                 LEFT JOIN conversation_receipts c ON c.conversation = m.conversation
                 WHERE m.id = ?
@@ -236,6 +281,20 @@ public actor MessageStore {
             delivered: snapshot.seq <= snapshot.deliveredSeq,
             read: snapshot.seq <= snapshot.readSeq
         )
+    }
+
+    /// This device's read watermark for the conversation's INCOMING
+    /// messages: the unread badge counts incoming seqs above it. 0 when
+    /// the conversation was never opened here.
+    public func myReadSeq(conversation: String) -> Int64 {
+        let highest: Int64? = try? queue.read { db in
+            try Int64.fetchOne(
+                db,
+                sql: "SELECT my_read_seq FROM conversation_receipts WHERE conversation = ?",
+                arguments: [conversation]
+            )
+        }
+        return highest ?? 0
     }
 
     /// Every conversation the store knows about, sorted.
@@ -273,15 +332,16 @@ public actor MessageStore {
         return body(history)
     }
 
-    private func mark(conversation: String, uptoSeq: Int64, isRead: Bool) {
+    private func markPeer(conversation: String, uptoSeq: Int64, isRead: Bool) {
         _ = try? queue.write { db in
             try db.execute(
                 sql: """
-                INSERT INTO conversation_receipts (conversation, delivered_seq, read_seq)
-                VALUES (?, ?, ?)
+                INSERT INTO conversation_receipts
+                    (conversation, peer_delivered_seq, peer_read_seq, my_read_seq)
+                VALUES (?, ?, ?, 0)
                 ON CONFLICT(conversation) DO UPDATE SET
-                    delivered_seq = MAX(delivered_seq, excluded.delivered_seq),
-                    read_seq = MAX(read_seq, excluded.read_seq)
+                    peer_delivered_seq = MAX(peer_delivered_seq, excluded.peer_delivered_seq),
+                    peer_read_seq = MAX(peer_read_seq, excluded.peer_read_seq)
                 """,
                 arguments: [conversation, uptoSeq, isRead ? uptoSeq : 0]
             )

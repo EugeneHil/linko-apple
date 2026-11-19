@@ -123,24 +123,27 @@ final class MessagingServiceTests: XCTestCase {
 
     // MARK: - Receipt acks from the peer
 
-    func test_ack_read_advances_receipts() async throws {
+    func test_ack_read_advances_peer_receipts_only() async throws {
         let store = try Fixtures.inMemoryStore()
         let service = makeService(store: store)
+        let conversation = ConversationKey.key(alice, bob)
 
         _ = await store.append(Fixtures.message(
-            id: "s-1", conversation: ConversationKey.key(alice, bob), from: alice, to: bob, seq: 4
+            id: "s-1", conversation: conversation, from: alice, to: bob, seq: 4
         ))
 
         let ack = Fixtures.ackEnvelope(
             type: LKTypes.msgAckRead,
-            conversation: ConversationKey.key(alice, bob),
+            conversation: conversation,
             uptoSeq: 4
         )
         await service.handle(.envelope(ack))
 
-        let receipt = await store.receipt(messageId: "s-1")
+        let receipt = await store.peerReceipt(messageId: "s-1")
         XCTAssertEqual(receipt?.read, true)
         XCTAssertEqual(receipt?.delivered, true)
+        let myRead = await store.myReadSeq(conversation: conversation)
+        XCTAssertEqual(myRead, 0, "the peer's ack must not advance this device's read watermark")
     }
 
     // MARK: - Sync on connect (Review Focus 3: gapped history heals)
@@ -260,17 +263,26 @@ final class MessagingServiceTests: XCTestCase {
                 id: "o-\(index)", conversation: conversation, from: bob, to: alice, seq: seq
             ))
         }
+        // Alice's own outgoing message shares the conversation: opening
+        // must read the incoming side without marking the peer as having
+        // read it (the false-Read bug, the rehearsal's 5th finding).
+        _ = await store.append(Fixtures.message(
+            id: "o-mine", conversation: conversation, from: alice, to: bob, seq: 4
+        ))
         let signaling = SignalingSendingFake()
         let service = makeService(store: store, signaling: signaling)
 
         try await service.open(conversation: conversation)
 
-        let receipts = await store.receipt(messageId: "o-2")
-        XCTAssertEqual(receipts?.read, true)
+        let myRead = await store.myReadSeq(conversation: conversation)
+        XCTAssertEqual(myRead, 4, "opening reads everything up to the highest seq")
+        let ownReceipt = await store.peerReceipt(messageId: "o-mine")
+        XCTAssertEqual(ownReceipt?.read, false, "opening must not mark the peer as having read")
+        XCTAssertEqual(ownReceipt?.delivered, false)
         let sent = signaling.envelopes
         XCTAssertEqual(sent.first?.type, LKTypes.msgAckRead)
         let body = try? LKMsgAck.from(bodyJSON: sent.first?.bodyJSON ?? "")
-        XCTAssertEqual(body?.uptoSeq, 3)
+        XCTAssertEqual(body?.uptoSeq, 4)
     }
 
     // MARK: - Surfacing (presence, session errors)

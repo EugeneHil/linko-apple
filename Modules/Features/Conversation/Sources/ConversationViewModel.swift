@@ -155,12 +155,20 @@ public final class ConversationViewModel {
 
     public func handle(_ event: MessagingEvent) async {
         switch event {
-        case .messageStored:
+        case let .messageStored(message):
             await refresh()
-            // The chat is open on screen: everything visible is read —
-            // tell the peer immediately (the rehearsal found the receipt
-            // stalling at Delivered until a reopen otherwise).
-            await markOpened()
+            // Read-on-delivery: an INCOMING message landing in the chat
+            // that is open on screen is read at once — tell the peer
+            // immediately (the rehearsal found the receipt stalling at
+            // Delivered until a reopen otherwise). The sender's own
+            // msg.stored must NOT open the conversation: that acked read
+            // for messages nobody had read (the false-Read bug, the
+            // rehearsal's 5th finding). The VM's stream lives only while
+            // the chat is on screen, so "incoming while this stream is
+            // alive" is exactly "read while open".
+            if message.from != localUser {
+                await markOpened()
+            }
         case let .receiptsUpdated(conversation):
             // The peer's ack advanced the watermarks: refresh the outgoing
             // receipt lines live (Sent → Delivered → Read) instead of
@@ -204,7 +212,7 @@ public final class ConversationViewModel {
         for message: StoredMessage,
         store: MessageStore
     ) async -> ConversationReceipt {
-        let snapshot = await store.receipt(messageId: message.id)
+        let snapshot = await store.peerReceipt(messageId: message.id)
         let delivered = snapshot?.delivered ?? false
         let read = snapshot?.read ?? false
         let time = time(message.ts)

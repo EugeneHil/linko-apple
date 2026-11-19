@@ -1,7 +1,8 @@
 // ChatsViewModel (Plan 4 Task 12): the chats list state — one row per
 // conversation with the last-message (or missed-call) preview, the unread
-// badge derived from the receipt watermarks, presence dots from
-// presence.changed events and the offline banner from connection events.
+// badge derived from the my-read watermark (incoming seqs above it),
+// presence dots from presence.changed events and the offline banner from
+// connection events.
 
 import Foundation
 import Messaging
@@ -142,12 +143,15 @@ public final class ChatsViewModel {
         for key in await store.conversations() {
             guard let peer = Self.peer(in: key, localUser: localUser) else { continue }
             let messages = await store.history(conversation: key)
+            // Unread = incoming messages above this device's own read
+            // watermark. The peer's receipt watermarks concern their
+            // reading of our outgoing messages and never touch the badge
+            // (the false-Read bug, the rehearsal's 5th finding, let a
+            // peer ack clear it).
+            let myRead = await store.myReadSeq(conversation: key)
             var unread = 0
-            for message in messages where message.from != localUser {
-                let receipt = await store.receipt(messageId: message.id)
-                if receipt?.read != true {
-                    unread += 1
-                }
+            for message in messages where message.from != localUser && message.seq > myRead {
+                unread += 1
             }
             guard let last = messages.last else { continue }
             let missedCall = missed[peer]
