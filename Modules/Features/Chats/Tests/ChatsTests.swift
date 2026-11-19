@@ -88,15 +88,41 @@ final class ChatsTests: XCTestCase {
         XCTAssertEqual(
             context.viewModel.rows.first?.unreadCount,
             2,
-            "incoming messages past the read watermark count"
+            "incoming messages above the my-read watermark count"
         )
 
-        await store.markRead(conversation: conversation, uptoSeq: 2)
+        await store.markMyRead(conversation: conversation, uptoSeq: 2)
         await context.viewModel.refresh()
         XCTAssertEqual(
             context.viewModel.rows.first?.unreadCount,
             0,
-            "the read watermark clears the badge"
+            "opening the conversation (the my-read watermark) clears the badge"
+        )
+    }
+
+    func test_peer_acks_do_not_clear_unread() async throws {
+        let store = try Fixtures.inMemoryStore()
+        let conversation = ConversationKey.key(alice, bob)
+        _ = await store.append(Fixtures.message(
+            id: "m1", conversation: conversation, from: bob, to: alice, seq: 1
+        ))
+        _ = await store.append(Fixtures.message(
+            id: "m2", conversation: conversation, from: bob, to: alice, seq: 2
+        ))
+        // Alice's own outgoing message; the peer acks read up to its seq.
+        // The false-Read bug (the rehearsal's 5th finding) let that ack
+        // drive the shared read watermark and clear the incoming badge.
+        _ = await store.append(Fixtures.message(
+            id: "m3", conversation: conversation, from: alice, to: bob, seq: 3
+        ))
+        await store.markPeerRead(conversation: conversation, uptoSeq: 3)
+        let context = makeContext(store: store)
+
+        await context.viewModel.refresh()
+        XCTAssertEqual(
+            context.viewModel.rows.first?.unreadCount,
+            2,
+            "the peer's acks are about their reading — incoming unread is untouched"
         )
     }
 

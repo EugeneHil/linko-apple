@@ -3,7 +3,8 @@
 //
 // - msg.deliver -> persist (idempotent by id) + msg.ack-delivered at the
 //   record's seq; duplicates are neither re-stored nor re-acked.
-// - msg.ack-delivered / msg.ack-read -> advance the receipt watermarks.
+// - msg.ack-delivered / msg.ack-read -> advance the PEER's receipt
+//   watermarks (the peer's progress on this device's outgoing messages).
 // - msg.stored -> retire the outbox entry and file the outgoing message
 //   with its server-assigned seq.
 // - .connected -> resend every pending outbox envelope (idempotent
@@ -112,11 +113,11 @@ public actor MessagingService {
             await handleDeliver(envelope)
         case LKTypes.msgAckDelivered:
             await handleAck(envelope) { conversation, upto in
-                await self.store.markDelivered(conversation: conversation, uptoSeq: upto)
+                await self.store.markPeerDelivered(conversation: conversation, uptoSeq: upto)
             }
         case LKTypes.msgAckRead:
             await handleAck(envelope) { conversation, upto in
-                await self.store.markRead(conversation: conversation, uptoSeq: upto)
+                await self.store.markPeerRead(conversation: conversation, uptoSeq: upto)
             }
         case LKTypes.msgStored:
             await handleStored(envelope)
@@ -208,11 +209,13 @@ public actor MessagingService {
         try? await signaling.send(envelope)
     }
 
-    /// The UI opened a conversation: read everything and tell the peer.
+    /// The UI opened a conversation: read everything (the my-read
+    /// watermark — the peer's receipt watermarks stay untouched) and tell
+    /// the peer.
     public func open(conversation: String) async throws {
         let highest = await store.highestSeq(conversation: conversation)
         guard highest > 0 else { return }
-        await store.markRead(conversation: conversation, uptoSeq: highest)
+        await store.markMyRead(conversation: conversation, uptoSeq: highest)
         await send(LKMsgAck(conversation: conversation, uptoSeq: highest), type: LKTypes.msgAckRead)
     }
 

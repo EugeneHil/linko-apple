@@ -31,8 +31,8 @@ final class ConversationTests: XCTestCase {
             id: "m2", conversation: conversation, from: alice, to: bob,
             seq: 2, ts: 7_200_000
         ))
-        await store.markDelivered(conversation: conversation, uptoSeq: 2)
-        await store.markRead(conversation: conversation, uptoSeq: 1)
+        await store.markPeerDelivered(conversation: conversation, uptoSeq: 2)
+        await store.markPeerRead(conversation: conversation, uptoSeq: 1)
 
         let context = Scenario.context(store: store)
         await context.viewModel.refresh()
@@ -71,8 +71,8 @@ final class ConversationTests: XCTestCase {
 
         await context.viewModel.markOpened()
 
-        let receipt = await store.receipt(messageId: "m1")
-        XCTAssertEqual(receipt?.read, true, "opening the conversation reads everything")
+        let myRead = await store.myReadSeq(conversation: conversation)
+        XCTAssertEqual(myRead, 1, "opening the conversation reads everything")
         XCTAssertEqual(context.signaling.types, [LKTypes.msgAckRead], "the peer learns about the read")
     }
 
@@ -152,7 +152,42 @@ final class ConversationTests: XCTestCase {
         XCTAssertTrue(back, "events resume after a stop/start cycle")
     }
 
-    // MARK: Live receipts (the rehearsal found them stalling at Delivered)
+    // MARK: Live receipts (the rehearsal found them stalling at Delivered,
+
+    // then showing a false Read on the sender's own messages — the 5th
+    // finding: markOpened must fire for incoming deliveries only)
+
+    func test_own_stored_message_does_not_mark_opened() async throws {
+        let store = try Fixtures.inMemoryStore()
+        let conversation = ConversationKey.key(alice, bob)
+        let record = Fixtures.message(
+            id: "m1", conversation: conversation, from: alice, to: bob,
+            seq: 1, ts: 3_600_000
+        )
+        // The service persists the stored confirmation BEFORE emitting
+        // messageStored — mirror that order here.
+        _ = await store.append(record)
+        let context = Scenario.context(store: store, localUser: alice, peer: bob)
+
+        context.viewModel.start()
+        context.events.yield(.messageStored(record))
+        let refreshed = await waitFor(
+            timeoutSeconds: 1,
+            context.viewModel.rows.count == 1
+        )
+        XCTAssertTrue(refreshed, "the outgoing bubble still renders")
+        context.viewModel.stop()
+
+        // The sender's own msg.stored must not open the conversation: no
+        // ack-read to the peer, no my-read watermark advance.
+        let acked = await waitFor(
+            timeoutSeconds: 0.3,
+            context.signaling.types.contains(LKTypes.msgAckRead)
+        )
+        XCTAssertFalse(acked, "own msg.stored must not ack-read to the peer")
+        let myRead = await store.myReadSeq(conversation: conversation)
+        XCTAssertEqual(myRead, 0, "own msg.stored must not advance the my-read watermark")
+    }
 
     func test_message_arriving_while_open_sends_read_receipt() async throws {
         let store = try Fixtures.inMemoryStore()
@@ -180,15 +215,16 @@ final class ConversationTests: XCTestCase {
             id: "m1", conversation: conversation, from: alice, to: bob,
             seq: 1, ts: 3_600_000
         ))
-        await store.markDelivered(conversation: conversation, uptoSeq: 1)
+        await store.markPeerDelivered(conversation: conversation, uptoSeq: 1)
         let context = Scenario.context(store: store, localUser: alice, peer: bob)
         context.viewModel.start()
         await context.viewModel.refresh()
         XCTAssertEqual(context.viewModel.rows.first?.receipt?.label, "Delivered 01:00")
 
-        // The peer read it: the watermark advances in the store and the
-        // service yields receiptsUpdated — the row flips without a reopen.
-        await store.markRead(conversation: conversation, uptoSeq: 1)
+        // The peer read it: the peer watermark advances in the store and
+        // the service yields receiptsUpdated — the row flips without a
+        // reopen.
+        await store.markPeerRead(conversation: conversation, uptoSeq: 1)
         context.events.yield(.receiptsUpdated(conversation: conversation))
         let flipped = await waitFor(
             context.viewModel.rows.first?.receipt?.label == "Read 01:00"
