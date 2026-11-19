@@ -134,6 +134,24 @@ final class ConversationTests: XCTestCase {
         context.viewModel.stop()
     }
 
+    func test_conversation_events_resume_after_stop_start() async throws {
+        let context = try Scenario.context(store: Fixtures.inMemoryStore())
+
+        context.viewModel.start()
+        context.events.yield(.connectionChanged(online: false))
+        let offline = await waitFor(!context.viewModel.online)
+        XCTAssertTrue(offline, "the banner surfaces on the first open")
+
+        // The app root swaps the conversation screen away and back:
+        // stop() cancels the consumer, so the next start() must subscribe
+        // a fresh stream — a one-shot stream stays finished.
+        context.viewModel.stop()
+        context.viewModel.start()
+        context.events.yield(.connectionChanged(online: true))
+        let back = await waitFor(context.viewModel.online)
+        XCTAssertTrue(back, "events resume after a stop/start cycle")
+    }
+
     // MARK: Live receipts (the rehearsal found them stalling at Delivered)
 
     func test_message_arriving_while_open_sends_read_receipt() async throws {

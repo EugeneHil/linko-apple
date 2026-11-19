@@ -52,6 +52,6 @@ public struct SettingsView: View {
         configStore: SessionConfigStore(defaults: UserDefaultsWriter()),
         defaults: UserDefaultsWriter(),
         deviceId: "7",
-        events: AsyncStream { _ in }
+        events: { AsyncStream { _ in } }
     ))
 }

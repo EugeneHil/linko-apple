@@ -50,10 +50,13 @@ public final class CallViewModel {
 
     private let coordinator: CallCoordinator
     private let defaults: any DefaultsWriting
-    /// The consumed call-state stream: the injected composition branch
-    /// (part 2: the root multiplexes the coordinator's single-consumer
-    /// stream) or the coordinator's own stream. Set at initialization.
-    private let stateStream: AsyncStream<CallState>?
+    /// The consumed call-state and stats streams as subscription factories:
+    /// the composition's multiplexers hand out a fresh branch per start(),
+    /// so stop/start cycles (the call screen appearing and disappearing)
+    /// never strand the view model on a finished one-shot stream. Nil falls
+    /// back to the coordinator's own streams (single start() only).
+    private let makeStateStream: (@Sendable () -> AsyncStream<CallState>)?
+    private let makeStatsStream: (@Sendable () -> AsyncStream<CallStatsSample>)?
     private var stateTask: Task<Void, Never>?
     private var statsTask: Task<Void, Never>?
     private var trackRefreshTask: Task<Void, Never>?
@@ -61,11 +64,13 @@ public final class CallViewModel {
     public init(
         coordinator: CallCoordinator,
         defaults: any DefaultsWriting,
-        stateStream: AsyncStream<CallState>? = nil
+        stateStream: (@Sendable () -> AsyncStream<CallState>)? = nil,
+        statsStream: (@Sendable () -> AsyncStream<CallStatsSample>)? = nil
     ) {
         self.coordinator = coordinator
         self.defaults = defaults
-        self.stateStream = stateStream
+        makeStateStream = stateStream
+        makeStatsStream = statsStream
     }
 
     /// Reads the persisted preferences (the SettingsViewModel.load()
@@ -81,7 +86,7 @@ public final class CallViewModel {
         if stateTask == nil {
             state = coordinator.currentState
             stateTask = Task { [weak self] in
-                let stream = self?.stateStream ?? self?.coordinator.callState
+                let stream = self?.makeStateStream?() ?? self?.coordinator.callState
                 guard let stream else { return }
                 for await snapshot in stream {
                     guard let self else { break }
@@ -91,7 +96,7 @@ public final class CallViewModel {
         }
         if statsTask == nil {
             statsTask = Task { [weak self] in
-                guard let stream = self?.coordinator.stats else { return }
+                guard let stream = self?.makeStatsStream?() ?? self?.coordinator.stats else { return }
                 for await sample in stream {
                     guard let self else { break }
                     stats = sample

@@ -20,14 +20,14 @@ final class ChatsTests: XCTestCase {
         let viewModel = ChatsViewModel(
             localUser: alice,
             store: store,
-            events: events.stream,
-            missedCalls: missed.stream,
+            events: events.subscribe,
+            missedCalls: missed.subscribe,
             users: users
         )
         return ChatsContext(
             viewModel: viewModel,
-            events: events.continuation,
-            missedCalls: missed.continuation,
+            events: events,
+            missedCalls: missed,
             users: users
         )
     }
@@ -117,6 +117,29 @@ final class ChatsTests: XCTestCase {
         let offline = await waitFor(context.viewModel.rows.first?.online == false)
         XCTAssertTrue(offline, "presence.changed turns the dot off")
         context.viewModel.stop()
+    }
+
+    func test_chats_events_resume_after_stop_start() async throws {
+        let store = try Fixtures.inMemoryStore()
+        let conversation = ConversationKey.key(alice, bob)
+        _ = await store.append(Fixtures.message(
+            id: "m1", conversation: conversation, from: bob, to: alice, seq: 1
+        ))
+        let context = makeContext(store: store)
+
+        context.viewModel.start()
+        context.events.yield(.presenceChanged(user: bob, online: true))
+        let online = await waitFor(context.viewModel.rows.first?.online == true)
+        XCTAssertTrue(online, "presence.changed turns the dot on")
+
+        // The app root swaps the chats screen for the conversation and
+        // back: stop() cancels the consumer, so the next start() must
+        // subscribe a fresh stream — a one-shot stream stays finished.
+        context.viewModel.stop()
+        context.viewModel.start()
+        context.events.yield(.presenceChanged(user: bob, online: false))
+        let offline = await waitFor(context.viewModel.rows.first?.online == false)
+        XCTAssertTrue(offline, "events resume after a stop/start cycle")
     }
 
     func test_chats_offline_banner_surfaces_on_disconnect() async throws {

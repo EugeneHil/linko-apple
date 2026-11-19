@@ -9,12 +9,76 @@ import Foundation
 import Messaging
 import XCTest
 
-/// One chats scenario: the view model plus the continuation handles the
-/// tests yield events through.
+/// A controllable event source: every subscribe() hands out a FRESH stream
+/// (mirroring the composition's multiplexer branches — the stop/start
+/// regression this pins), and yields reach the latest subscriber, queued
+/// until the first subscribe arrives.
+final class EventSource<Event: Sendable>: @unchecked Sendable {
+    /// A class box around the (struct) continuation: the retirement handler
+    /// needs identity to only retire its own stream.
+    private final class Box: @unchecked Sendable {
+        let continuation: AsyncStream<Event>.Continuation
+        init(_ continuation: AsyncStream<Event>.Continuation) {
+            self.continuation = continuation
+        }
+    }
+
+    private let lock = NSLock()
+    private var box: Box?
+    private var pending: [Event] = []
+
+    func subscribe() -> AsyncStream<Event> {
+        let (stream, continuation) = AsyncStream<Event>.makeStream()
+        let holder = Box(continuation)
+        // A cancelled consumer finishes the stream: retire the handle so
+        // later yields queue up for the next subscriber instead of falling
+        // into the finished one.
+        continuation.onTermination = { [weak self] _ in
+            self?.retire(holder)
+        }
+        lock.withLock {
+            box = holder
+            for event in pending {
+                continuation.yield(event)
+            }
+            pending = []
+        }
+        return stream
+    }
+
+    func yield(_ event: Event) {
+        lock.withLock {
+            if let box {
+                box.continuation.yield(event)
+            } else {
+                pending.append(event)
+            }
+        }
+    }
+
+    /// Finishes the current stream (the next subscribe() starts a new one).
+    func finish() {
+        lock.withLock {
+            box?.continuation.finish()
+            box = nil
+        }
+    }
+
+    private func retire(_ retired: Box) {
+        lock.withLock {
+            if box === retired {
+                box = nil
+            }
+        }
+    }
+}
+
+/// One chats scenario: the view model plus the event sources the tests
+/// yield through.
 struct ChatsContext {
     let viewModel: ChatsViewModel
-    let events: AsyncStream<MessagingEvent>.Continuation
-    let missedCalls: AsyncStream<MissedCallEvent>.Continuation
+    let events: EventSource<MessagingEvent>
+    let missedCalls: EventSource<MissedCallEvent>
     let users: UserSearchingFake
 }
 
@@ -71,16 +135,12 @@ enum Fixtures {
         )
     }
 
-    static func messagingEvents() -> (
-        stream: AsyncStream<MessagingEvent>, continuation: AsyncStream<MessagingEvent>.Continuation
-    ) {
-        AsyncStream.makeStream(of: MessagingEvent.self)
+    static func messagingEvents() -> EventSource<MessagingEvent> {
+        EventSource()
     }
 
-    static func missedCallEvents() -> (
-        stream: AsyncStream<MissedCallEvent>, continuation: AsyncStream<MissedCallEvent>.Continuation
-    ) {
-        AsyncStream.makeStream(of: MissedCallEvent.self)
+    static func missedCallEvents() -> EventSource<MissedCallEvent> {
+        EventSource()
     }
 }
 

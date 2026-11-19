@@ -252,30 +252,33 @@ extension SessionGraph {
         assembly: CoordinatorAssembly,
         context: SessionBuildContext
     ) async -> GraphFans {
-        // The call-state fan-out: the layout watcher and the call view
-        // model are two consumers of the single-consumer stream.
+        // The fan-outs: every view model subscribes a fresh branch per
+        // start() (stop/start cycles must not strand it on a finished
+        // one-shot stream — the LNK-41 rehearsal finding).
         let callStateFanout = EventMultiplexer(assembly.coordinator.callState)
+        let coordinatorStatsFanout = EventMultiplexer(assembly.coordinator.stats)
         let callViewModel = CallViewModel(
             coordinator: assembly.coordinator,
             defaults: context.defaults,
-            stateStream: callStateFanout.subscribe()
+            stateStream: { callStateFanout.subscribe() },
+            statsStream: { coordinatorStatsFanout.subscribe() }
         )
         let messagingFanout = await EventMultiplexer(services.messaging.events)
-        let missedCalls = fanoutMap(assembly.missedRecorder.calls) { notice in
+        let missedFanout = EventMultiplexer(fanoutMap(assembly.missedRecorder.calls) { notice in
             MissedCallEvent(peer: notice.peer, ts: notice.ts)
-        }
+        })
         let chatsViewModel = ChatsViewModel(
             localUser: context.config.username,
             store: services.store,
-            events: messagingFanout.subscribe(),
-            missedCalls: missedCalls,
+            events: { messagingFanout.subscribe() },
+            missedCalls: { missedFanout.subscribe() },
             users: services.users
         )
         let settingsViewModel = SettingsViewModel(
             configStore: context.configStore,
             defaults: context.defaults,
             deviceId: context.deviceId,
-            events: messagingFanout.subscribe()
+            events: { messagingFanout.subscribe() }
         )
         let transferFanout = await EventMultiplexer(services.transfers.events)
 
