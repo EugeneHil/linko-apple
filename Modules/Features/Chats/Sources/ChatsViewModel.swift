@@ -67,8 +67,8 @@ public final class ChatsViewModel {
 
     private let localUser: String
     private let store: MessageStore
-    private let events: AsyncStream<MessagingEvent>
-    private let missedCalls: AsyncStream<MissedCallEvent>
+    private let makeEvents: @Sendable () -> AsyncStream<MessagingEvent>
+    private let makeMissedCalls: @Sendable () -> AsyncStream<MissedCallEvent>
     private let users: any UserSearching
     private var presence: [String: Bool] = [:]
     private var missed: [String: MissedCallEvent] = [:]
@@ -78,23 +78,26 @@ public final class ChatsViewModel {
     public init(
         localUser: String,
         store: MessageStore,
-        events: AsyncStream<MessagingEvent>,
-        missedCalls: AsyncStream<MissedCallEvent>,
+        events: @escaping @Sendable () -> AsyncStream<MessagingEvent>,
+        missedCalls: @escaping @Sendable () -> AsyncStream<MissedCallEvent>,
         users: any UserSearching
     ) {
         self.localUser = localUser
         self.store = store
-        self.events = events
-        self.missedCalls = missedCalls
+        makeEvents = events
+        makeMissedCalls = missedCalls
         self.users = users
     }
 
-    /// Begins consuming the injected streams (composition fan-out of the
-    /// messaging and call event sources). Safe to call again.
+    /// Subscribes a fresh stream per start and consumes it until stop():
+    /// the composition's multiplexer hands out a new branch each call, so
+    /// stop/start cycles (the app root swapping the chats screen for the
+    /// conversation) never strand the view model on a finished one-shot
+    /// stream. Safe to call again.
     public func start() {
         if eventsTask == nil {
             eventsTask = Task { [weak self] in
-                guard let stream = self?.events else { return }
+                guard let stream = self?.makeEvents() else { return }
                 for await event in stream {
                     guard let self else { break }
                     await handle(event)
@@ -103,7 +106,7 @@ public final class ChatsViewModel {
         }
         if missedTask == nil {
             missedTask = Task { [weak self] in
-                guard let stream = self?.missedCalls else { return }
+                guard let stream = self?.makeMissedCalls() else { return }
                 for await event in stream {
                     guard let self else { break }
                     await handle(event)

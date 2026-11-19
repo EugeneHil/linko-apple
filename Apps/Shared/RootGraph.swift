@@ -171,13 +171,15 @@ final class SessionGraph {
     /// selection subscribes its own branches (the view model stops them on
     /// disappear, which detaches the branches).
     func makeConversationViewModel(peer: String) -> ConversationViewModel {
-        ConversationViewModel(
+        let messagingMux = messagingEventsMultiplexer
+        let transferMux = transferEventsMultiplexer
+        return ConversationViewModel(
             localUser: config.username,
             peer: peer,
             store: store,
             messaging: messaging,
-            events: messagingEventsMultiplexer.subscribe(),
-            transfers: transferEventsMultiplexer.subscribe()
+            events: { messagingMux.subscribe() },
+            transfers: { transferMux.subscribe() }
         )
     }
 

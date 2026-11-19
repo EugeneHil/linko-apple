@@ -83,12 +83,76 @@ enum Fixtures {
 
 /// One conversation scenario: the view model over a real MessagingService,
 /// plus the handles the tests assert against.
+/// A controllable event source: every subscribe() hands out a FRESH stream
+/// (mirroring the composition's multiplexer branches — the stop/start
+/// regression this pins), and yields reach the latest subscriber, queued
+/// until the first subscribe arrives.
+final class EventSource<Event: Sendable>: @unchecked Sendable {
+    /// A class box around the (struct) continuation: the retirement handler
+    /// needs identity to only retire its own stream.
+    private final class Box: @unchecked Sendable {
+        let continuation: AsyncStream<Event>.Continuation
+        init(_ continuation: AsyncStream<Event>.Continuation) {
+            self.continuation = continuation
+        }
+    }
+
+    private let lock = NSLock()
+    private var box: Box?
+    private var pending: [Event] = []
+
+    func subscribe() -> AsyncStream<Event> {
+        let (stream, continuation) = AsyncStream<Event>.makeStream()
+        let holder = Box(continuation)
+        // A cancelled consumer finishes the stream: retire the handle so
+        // later yields queue up for the next subscriber instead of falling
+        // into the finished one.
+        continuation.onTermination = { [weak self] _ in
+            self?.retire(holder)
+        }
+        lock.withLock {
+            box = holder
+            for event in pending {
+                continuation.yield(event)
+            }
+            pending = []
+        }
+        return stream
+    }
+
+    func yield(_ event: Event) {
+        lock.withLock {
+            if let box {
+                box.continuation.yield(event)
+            } else {
+                pending.append(event)
+            }
+        }
+    }
+
+    /// Finishes the current stream (the next subscribe() starts a new one).
+    func finish() {
+        lock.withLock {
+            box?.continuation.finish()
+            box = nil
+        }
+    }
+
+    private func retire(_ retired: Box) {
+        lock.withLock {
+            if box === retired {
+                box = nil
+            }
+        }
+    }
+}
+
 struct Context {
     let viewModel: ConversationViewModel
     let outbox: Outbox
     let signaling: SignalingSendingFake
-    let events: AsyncStream<MessagingEvent>.Continuation
-    let transfers: AsyncStream<TransferEvent>.Continuation
+    let events: EventSource<MessagingEvent>
+    let transfers: EventSource<TransferEvent>
 }
 
 enum Scenario {
@@ -99,22 +163,22 @@ enum Scenario {
         let messaging = MessagingService(
             localUser: localUser, store: store, outbox: outbox, signaling: signaling
         )
-        let events = AsyncStream.makeStream(of: MessagingEvent.self)
-        let transfers = AsyncStream.makeStream(of: TransferEvent.self)
+        let events = EventSource<MessagingEvent>()
+        let transfers = EventSource<TransferEvent>()
         let viewModel = ConversationViewModel(
             localUser: localUser,
             peer: peer,
             store: store,
             messaging: messaging,
-            events: events.stream,
-            transfers: transfers.stream
+            events: events.subscribe,
+            transfers: transfers.subscribe
         )
         return Context(
             viewModel: viewModel,
             outbox: outbox,
             signaling: signaling,
-            events: events.continuation,
-            transfers: transfers.continuation
+            events: events,
+            transfers: transfers
         )
     }
 }

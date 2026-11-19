@@ -73,8 +73,8 @@ public final class ConversationViewModel {
     private let conversation: String
     private let store: MessageStore
     private let messaging: MessagingService
-    private let events: AsyncStream<MessagingEvent>
-    private let transfers: AsyncStream<TransferEvent>
+    private let makeEvents: @Sendable () -> AsyncStream<MessagingEvent>
+    private let makeTransfers: @Sendable () -> AsyncStream<TransferEvent>
     private let fileProgress: FileBubbleProgress
     private var eventsTask: Task<Void, Never>?
     private var transfersTask: Task<Void, Never>?
@@ -84,26 +84,29 @@ public final class ConversationViewModel {
         peer: String,
         store: MessageStore,
         messaging: MessagingService,
-        events: AsyncStream<MessagingEvent>,
-        transfers: AsyncStream<TransferEvent>
+        events: @escaping @Sendable () -> AsyncStream<MessagingEvent>,
+        transfers: @escaping @Sendable () -> AsyncStream<TransferEvent>
     ) {
         self.localUser = localUser
         self.peer = peer
         conversation = ConversationKey.key(localUser, peer)
         self.store = store
         self.messaging = messaging
-        self.events = events
-        self.transfers = transfers
+        makeEvents = events
+        makeTransfers = transfers
         fileProgress = FileBubbleProgress()
     }
 
-    /// Begins consuming the injected streams (composition fan-out of the
-    /// messaging service and the TransferCoordinator event streams). Safe
-    /// to call again.
+    /// Subscribes a fresh stream per start and consumes it until stop():
+    /// the composition's multiplexer hands out a new branch each call, so
+    /// stop/start cycles (the app root swapping screens) never strand the
+    /// view model on a finished one-shot stream — read-on-delivery and the
+    /// live receipt refresh keep working on every reopen. Safe to call
+    /// again.
     public func start() {
         if eventsTask == nil {
             eventsTask = Task { [weak self] in
-                guard let stream = self?.events else { return }
+                guard let stream = self?.makeEvents() else { return }
                 for await event in stream {
                     guard let self else { break }
                     await handle(event)
@@ -112,7 +115,7 @@ public final class ConversationViewModel {
         }
         if transfersTask == nil {
             transfersTask = Task { [weak self] in
-                guard let stream = self?.transfers else { return }
+                guard let stream = self?.makeTransfers() else { return }
                 for await event in stream {
                     guard let self else { break }
                     handle(event)

@@ -23,7 +23,7 @@ final class SettingsTests: XCTestCase {
             configStore: SessionConfigStore(defaults: defaults),
             defaults: defaults,
             deviceId: "7",
-            events: events.stream
+            events: { events.stream }
         )
         return (viewModel, events.continuation)
     }

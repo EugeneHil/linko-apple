@@ -24,7 +24,7 @@ public final class SettingsViewModel {
     private let configStore: SessionConfigStore
     private let defaults: any DefaultsWriting
     private let deviceId: String
-    private let events: AsyncStream<MessagingEvent>
+    private let makeEvents: @Sendable () -> AsyncStream<MessagingEvent>
     private var config: SessionConfig?
     private var eventsTask: Task<Void, Never>?
     private var statsOverlay: Bool = false
@@ -33,12 +33,12 @@ public final class SettingsViewModel {
         configStore: SessionConfigStore,
         defaults: any DefaultsWriting,
         deviceId: String,
-        events: AsyncStream<MessagingEvent>
+        events: @escaping @Sendable () -> AsyncStream<MessagingEvent>
     ) {
         self.configStore = configStore
         self.defaults = defaults
         self.deviceId = deviceId
-        self.events = events
+        makeEvents = events
     }
 
     /// Reads the persisted state: the SessionConfig and the stats overlay.
@@ -51,10 +51,14 @@ public final class SettingsViewModel {
 
     /// Begins consuming the injected events stream (composition fan-out of
     /// the messaging service events). Safe to call again.
+    /// Subscribes a fresh stream per start (the composition's multiplexer
+    /// hands out a new branch each call): the settings sheet appears and
+    /// disappears freely without stranding the view model on a finished
+    /// one-shot stream. Safe to call again.
     public func start() {
         if eventsTask == nil {
             eventsTask = Task { [weak self] in
-                guard let stream = self?.events else { return }
+                guard let stream = self?.makeEvents() else { return }
                 for await event in stream {
                     guard let self else { break }
                     handle(event)
