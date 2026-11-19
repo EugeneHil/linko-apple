@@ -143,6 +143,31 @@ final class MessagingServiceTests: XCTestCase {
         XCTAssertEqual(receipt?.delivered, true)
     }
 
+    func test_ack_yields_receipts_updated_event() async throws {
+        let store = try Fixtures.inMemoryStore()
+        let service = makeService(store: store)
+
+        let collector = EventCollector()
+        let stream = await service.events
+        let run = Task {
+            for await event in stream {
+                collector.add(event)
+            }
+        }
+
+        let conversation = ConversationKey.key(alice, bob)
+        let ack = Fixtures.ackEnvelope(
+            type: LKTypes.msgAckRead,
+            conversation: conversation,
+            uptoSeq: 4
+        )
+        await service.handle(.envelope(ack))
+
+        let seen = await waitFor(collector, event: .receiptsUpdated(conversation: conversation))
+        XCTAssertTrue(seen, "the ack surfaces as receiptsUpdated so the UI refreshes live")
+        run.cancel()
+    }
+
     // MARK: - Sync on connect (Review Focus 3: gapped history heals)
 
     func test_gap_triggers_sync_request() async throws {

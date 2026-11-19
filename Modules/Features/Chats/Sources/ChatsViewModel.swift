@@ -186,6 +186,8 @@ public final class ChatsViewModel {
             await refresh()
         case .messageStored:
             await refresh()
+        case .receiptsUpdated:
+            break // receipt lines live in the conversation screen, not here
         case let .connectionChanged(isOnline):
             online = isOnline
         case .sessionError:

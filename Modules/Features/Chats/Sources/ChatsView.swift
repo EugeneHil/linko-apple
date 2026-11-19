@@ -27,9 +27,9 @@ public struct ChatsView: View {
                 TextField("Find a user…", text: $query)
                     .textFieldStyle(.roundedBorder)
                     .autocorrectionDisabled()
-                    #if os(iOS)
-                        .textInputAutocapitalization(.never)
-                    #endif
+                #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                #endif
                     .padding(.horizontal, LKTokens.Spacing.s8)
                     .onChange(of: query) { _, newValue in
                         searchTask?.cancel()
