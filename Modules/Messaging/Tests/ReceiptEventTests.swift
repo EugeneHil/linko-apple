@@ -2,9 +2,9 @@
 // envelopes advance the watermarks AND surface as events, so the
 // conversation screen refreshes its receipt lines live.
 
-@testable import Messaging
 import CoreBridge
 import Foundation
+@testable import Messaging
 import XCTest
 
 private final class Collector: @unchecked Sendable {
