@@ -18,7 +18,7 @@ back through `fix/LNK-<n>-…` branches before the release (Task 15).
 
 Run: after `invite create` twice on the VPS (server-side rows), open Linko on
 each device, paste the `linko://join?…` invite link, register the Mac as
-`eugene` and the iPhone as `anna`.
+`eugene` and the iPhone as `tatsiana`.
 
 - [ ] iPhone: the pasted invite link is accepted (paste-only in v0.1; QR
       scan is cut, plan cut #4), the username step completes, registration
@@ -26,7 +26,7 @@ each device, paste the `linko://join?…` invite link, register the Mac as
       list.
 - [ ] Mac: the same flow lands on the Mac chat window. Screenshot.
 - [ ] Each device finds the other by username through in-app user search:
-      search `anna` on the Mac and `eugene` on the iPhone; the peer appears
+      search `tatsiana` on the Mac and `eugene` on the iPhone; the peer appears
       and a conversation opens.
 - [ ] iOS install recorded: built from Xcode with the free Personal Team;
       note the profile expiry date here (7 days) and the rebuild used to
