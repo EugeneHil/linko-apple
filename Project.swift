@@ -802,6 +802,9 @@ private let callTests = featureTestsTarget(
         .target(name: "Signaling"),
         .target(name: "ServerAPI"),
         .target(name: "Settings"),
+        // The audio-route tests bind the CallKitIntegration monitor through
+        // its NotificationObserving seam.
+        .target(name: "CallKitIntegration"),
     ]
 )
 
