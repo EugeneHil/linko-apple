@@ -133,4 +133,49 @@ final class ConversationTests: XCTestCase {
         XCTAssertTrue(back, "reconnecting clears the banner")
         context.viewModel.stop()
     }
+
+    // MARK: Live receipts (the rehearsal found them stalling at Delivered)
+
+    func test_message_arriving_while_open_sends_read_receipt() async throws {
+        let store = try Fixtures.inMemoryStore()
+        let conversation = ConversationKey.key(alice, bob)
+        let record = Fixtures.message(
+            id: "m1", conversation: conversation, from: bob, to: alice,
+            seq: 1, ts: 3_600_000
+        )
+        // The service persists the delivered message BEFORE emitting
+        // messageStored — mirror that order here.
+        _ = await store.append(record)
+        let context = Scenario.context(store: store, localUser: alice, peer: bob)
+
+        context.viewModel.start()
+        context.events.yield(.messageStored(record))
+        let readSent = await waitFor(context.signaling.types.contains(LKTypes.msgAckRead))
+        XCTAssertTrue(readSent, "an incoming message in the open chat marks it read at once")
+        context.viewModel.stop()
+    }
+
+    func test_receipt_event_refreshes_label_live() async throws {
+        let store = try Fixtures.inMemoryStore()
+        let conversation = ConversationKey.key(alice, bob)
+        _ = await store.append(Fixtures.message(
+            id: "m1", conversation: conversation, from: alice, to: bob,
+            seq: 1, ts: 3_600_000
+        ))
+        await store.markDelivered(conversation: conversation, uptoSeq: 1)
+        let context = Scenario.context(store: store, localUser: alice, peer: bob)
+        context.viewModel.start()
+        await context.viewModel.refresh()
+        XCTAssertEqual(context.viewModel.rows.first?.receipt?.label, "Delivered 01:00")
+
+        // The peer read it: the watermark advances in the store and the
+        // service yields receiptsUpdated — the row flips without a reopen.
+        await store.markRead(conversation: conversation, uptoSeq: 1)
+        context.events.yield(.receiptsUpdated(conversation: conversation))
+        let flipped = await waitFor(
+            context.viewModel.rows.first?.receipt?.label == "Read 01:00"
+        )
+        XCTAssertTrue(flipped, "receipts update the label live")
+        context.viewModel.stop()
+    }
 }

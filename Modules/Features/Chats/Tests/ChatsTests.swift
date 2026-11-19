@@ -16,16 +16,19 @@ final class ChatsTests: XCTestCase {
     private func makeContext(store: MessageStore) -> ChatsContext {
         let events = Fixtures.messagingEvents()
         let missed = Fixtures.missedCallEvents()
+        let users = UserSearchingFake()
         let viewModel = ChatsViewModel(
             localUser: alice,
             store: store,
             events: events.stream,
-            missedCalls: missed.stream
+            missedCalls: missed.stream,
+            users: users
         )
         return ChatsContext(
             viewModel: viewModel,
             events: events.continuation,
-            missedCalls: missed.continuation
+            missedCalls: missed.continuation,
+            users: users
         )
     }
 
@@ -130,5 +133,43 @@ final class ChatsTests: XCTestCase {
         let backOnline = await waitFor(context.viewModel.online)
         XCTAssertTrue(backOnline, "reconnecting clears the banner")
         context.viewModel.stop()
+    }
+
+    // MARK: User search (spec §10 item 1 — the way a new chat starts)
+
+    func test_search_passes_prefix_to_users_seam_and_shows_matches() async throws {
+        let store = try Fixtures.inMemoryStore()
+        let context = makeContext(store: store)
+        context.users.matches = ["tatsiana", "eugene"]
+
+        await context.viewModel.search(prefix: "  tat  ")
+
+        XCTAssertEqual(context.users.queried, ["tat"], "the prefix is trimmed before the query")
+        XCTAssertEqual(context.viewModel.searchResults, ["tatsiana", "eugene"])
+    }
+
+    func test_search_empty_prefix_clears_results() async throws {
+        let store = try Fixtures.inMemoryStore()
+        let context = makeContext(store: store)
+        context.users.matches = ["tatsiana"]
+        await context.viewModel.search(prefix: "tat")
+        let shown = await waitFor(!context.viewModel.searchResults.isEmpty)
+        XCTAssertTrue(shown)
+
+        await context.viewModel.search(prefix: "   ")
+
+        XCTAssertTrue(context.viewModel.searchResults.isEmpty, "an empty prefix clears the list")
+        XCTAssertEqual(context.users.queried, ["tat"], "the empty prefix makes no server round-trip")
+    }
+
+    func test_search_failure_clears_results_quietly() async throws {
+        let store = try Fixtures.inMemoryStore()
+        let context = makeContext(store: store)
+        struct ProbeError: Error {}
+        context.users.error = ProbeError()
+
+        await context.viewModel.search(prefix: "tat")
+
+        XCTAssertTrue(context.viewModel.searchResults.isEmpty, "a failed search shows no stale rows")
     }
 }

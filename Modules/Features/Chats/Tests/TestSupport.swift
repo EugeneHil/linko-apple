@@ -15,6 +15,23 @@ struct ChatsContext {
     let viewModel: ChatsViewModel
     let events: AsyncStream<MessagingEvent>.Continuation
     let missedCalls: AsyncStream<MissedCallEvent>.Continuation
+    let users: UserSearchingFake
+}
+
+/// Records the queried prefixes and returns canned matches (or throws) —
+/// the seam contract lives in Chats (spec §10 item 1 user search).
+final class UserSearchingFake: UserSearching, @unchecked Sendable {
+    var matches: [String] = []
+    var error: (any Error)?
+    private(set) var queried: [String] = []
+
+    func search(prefix: String) async throws -> [String] {
+        queried.append(prefix)
+        if let error {
+            throw error
+        }
+        return matches
+    }
 }
 
 enum Fixtures {

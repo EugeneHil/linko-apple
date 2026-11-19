@@ -28,7 +28,12 @@ struct GraphServices {
     let messaging: MessagingService
     let transfers: TransferCoordinator
     let engine: DefaultCallEngine
+    let users: UsersClient
 }
+
+/// UsersClient already matches the Chats search seam point-for-point
+/// (`search(prefix:)` over GET /api/v1/users?prefix=…, sorted ≤ 20).
+extension UsersClient: @retroactive UserSearching {}
 
 /// The coordinator's wiring: the fan-outs feeding it and the reporter.
 struct CoordinatorAssembly {
@@ -139,21 +144,9 @@ extension SessionGraph {
             signaling: signaling
         )
         let files = FilesClient(baseURL: apiBase, transport: transport, tokens: tokens)
-        let transfers = TransferCoordinator(
-            signaling: signaling,
-            recorder: OutboxTransferRecorder(outbox: outbox, signaling: signaling),
-            server: ServerFileTransfer(files: files)
-        )
-        // Fail-soft: a refused TURN fetch yields an empty relay list — ICE
-        // still works host-to-host, relayed calls degrade (disclosed).
-        let turn = try? await TurnClient(baseURL: apiBase, transport: transport, tokens: tokens)
-            .credentials()
-        let engine = DefaultCallEngine(credentials: turn ?? TurnCredentials(
-            username: "",
-            credential: "",
-            ttlSec: 0,
-            urls: []
-        ))
+        let users = UsersClient(baseURL: apiBase, transport: transport, tokens: tokens)
+        let transfers = makeTransfers(files: files, signaling: signaling, outbox: outbox)
+        let engine = await makeEngine(apiBase: apiBase, transport: transport, tokens: tokens)
         return GraphServices(
             apiBase: apiBase,
             tokens: tokens,
@@ -163,8 +156,41 @@ extension SessionGraph {
             signaling: signaling,
             messaging: messaging,
             transfers: transfers,
-            engine: engine
+            engine: engine,
+            users: users
         )
+    }
+
+    /// The transfer stack over the shared files client (data channel +
+    /// server fallback, spec §4.2).
+    private static func makeTransfers(
+        files: FilesClient,
+        signaling: SignalingClient,
+        outbox: Outbox
+    ) -> TransferCoordinator {
+        TransferCoordinator(
+            signaling: signaling,
+            recorder: OutboxTransferRecorder(outbox: outbox, signaling: signaling),
+            server: ServerFileTransfer(files: files)
+        )
+    }
+
+    /// The one engine per app; a refused TURN fetch yields an empty relay
+    /// list — ICE still works host-to-host, relayed calls degrade
+    /// (disclosed).
+    private static func makeEngine(
+        apiBase: URL,
+        transport: PinnedHTTPClient,
+        tokens: KeychainTokenStore
+    ) async -> DefaultCallEngine {
+        let turn = try? await TurnClient(baseURL: apiBase, transport: transport, tokens: tokens)
+            .credentials()
+        return DefaultCallEngine(credentials: turn ?? TurnCredentials(
+            username: "",
+            credential: "",
+            ttlSec: 0,
+            urls: []
+        ))
     }
 
     /// The coordinator over the fan-outs, the missed-call recorder and the
@@ -242,7 +268,8 @@ extension SessionGraph {
             localUser: context.config.username,
             store: services.store,
             events: messagingFanout.subscribe(),
-            missedCalls: missedCalls
+            missedCalls: missedCalls,
+            users: services.users
         )
         let settingsViewModel = SettingsViewModel(
             configStore: context.configStore,

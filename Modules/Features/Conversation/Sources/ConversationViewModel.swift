@@ -154,6 +154,17 @@ public final class ConversationViewModel {
         switch event {
         case .messageStored:
             await refresh()
+            // The chat is open on screen: everything visible is read —
+            // tell the peer immediately (the rehearsal found the receipt
+            // stalling at Delivered until a reopen otherwise).
+            await markOpened()
+        case let .receiptsUpdated(conversation):
+            // The peer's ack advanced the watermarks: refresh the outgoing
+            // receipt lines live (Sent → Delivered → Read) instead of
+            // waiting for the next reopen.
+            if conversation == self.conversation {
+                await refresh()
+            }
         case let .connectionChanged(isOnline):
             online = isOnline
         case .presenceChanged, .sessionError:

@@ -46,11 +46,20 @@ public struct MissedCallEvent: Sendable, Equatable {
     }
 }
 
+/// The user-search seam (spec §10 item 1: a new chat starts by searching
+/// the peer). The composition root wires the ServerAPI UsersClient behind
+/// it; tests use fakes. Implementations return ≤ 20 sorted matches for a
+/// non-empty prefix.
+public protocol UserSearching: Sendable {
+    func search(prefix: String) async throws -> [String]
+}
+
 @MainActor
 @Observable
 public final class ChatsViewModel {
     public private(set) var rows: [ChatSummary] = []
     public private(set) var online = true
+    public private(set) var searchResults: [String] = []
 
     public var showOfflineBanner: Bool {
         !online
@@ -60,6 +69,7 @@ public final class ChatsViewModel {
     private let store: MessageStore
     private let events: AsyncStream<MessagingEvent>
     private let missedCalls: AsyncStream<MissedCallEvent>
+    private let users: any UserSearching
     private var presence: [String: Bool] = [:]
     private var missed: [String: MissedCallEvent] = [:]
     private var eventsTask: Task<Void, Never>?
@@ -69,12 +79,14 @@ public final class ChatsViewModel {
         localUser: String,
         store: MessageStore,
         events: AsyncStream<MessagingEvent>,
-        missedCalls: AsyncStream<MissedCallEvent>
+        missedCalls: AsyncStream<MissedCallEvent>,
+        users: any UserSearching
     ) {
         self.localUser = localUser
         self.store = store
         self.events = events
         self.missedCalls = missedCalls
+        self.users = users
     }
 
     /// Begins consuming the injected streams (composition fan-out of the
@@ -105,6 +117,19 @@ public final class ChatsViewModel {
         missedTask?.cancel()
         eventsTask = nil
         missedTask = nil
+    }
+
+    /// Queries the users seam for the Chats search field. An empty or
+    /// whitespace prefix clears the results without a round-trip; a failed
+    /// query surfaces as an empty result set (the search field is
+    /// exploratory — no error banners here).
+    public func search(prefix: String) async {
+        let trimmed = prefix.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else {
+            searchResults = []
+            return
+        }
+        searchResults = await (try? users.search(prefix: trimmed)) ?? []
     }
 
     /// Rebuilds the rows from the store, the presence map and the locally
@@ -161,6 +186,8 @@ public final class ChatsViewModel {
             await refresh()
         case .messageStored:
             await refresh()
+        case .receiptsUpdated:
+            break // receipt lines live in the conversation screen, not here
         case let .connectionChanged(isOnline):
             online = isOnline
         case .sessionError:

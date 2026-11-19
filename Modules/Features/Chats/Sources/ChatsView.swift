@@ -11,6 +11,8 @@ public struct ChatsView: View {
     /// each row becomes a button that hands over the peer. Nil keeps the
     /// part-1 look-and-feel exactly.
     public var onSelect: ((String) -> Void)?
+    @State private var query = ""
+    @State private var searchTask: Task<Void, Never>?
 
     public init(viewModel: ChatsViewModel) {
         _viewModel = State(initialValue: viewModel)
@@ -21,6 +23,24 @@ public struct ChatsView: View {
             VStack(spacing: LKTokens.Spacing.s8) {
                 if viewModel.showOfflineBanner {
                     Banner(message: "Offline — messages send when you are back")
+                }
+                TextField("Find a user…", text: $query)
+                    .textFieldStyle(.roundedBorder)
+                    .autocorrectionDisabled()
+                #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                #endif
+                    .padding(.horizontal, LKTokens.Spacing.s8)
+                    .onChange(of: query) { _, newValue in
+                        searchTask?.cancel()
+                        searchTask = Task {
+                            try? await Task.sleep(for: .milliseconds(250))
+                            guard !Task.isCancelled else { return }
+                            await viewModel.search(prefix: newValue)
+                        }
+                    }
+                if !query.isEmpty {
+                    searchResultsList
                 }
                 List(viewModel.rows) { row in
                     if let onSelect {
@@ -44,6 +64,31 @@ public struct ChatsView: View {
             .onDisappear {
                 viewModel.stop()
             }
+        }
+    }
+
+    /// The peer matches under the search field (spec §10 item 1): tapping
+    /// one opens the conversation through the same onSelect path the chat
+    /// rows use.
+    @ViewBuilder
+    private var searchResultsList: some View {
+        let results = viewModel.searchResults
+        if results.isEmpty {
+            Text("No matches")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, LKTokens.Spacing.s8)
+        } else {
+            List(results, id: \.self) { user in
+                Button {
+                    query = ""
+                    Task { await viewModel.search(prefix: "") }
+                    onSelect?(user)
+                } label: {
+                    Text(user)
+                }
+            }
+            .listStyle(.plain)
         }
     }
 

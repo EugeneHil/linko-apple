@@ -23,6 +23,9 @@ public enum MessagingEvent: Sendable, Equatable {
     case presenceChanged(user: String, online: Bool)
     case sessionError(code: String, detail: String)
     case messageStored(StoredMessage)
+    /// The peer advanced the receipt watermarks (msg.ack-delivered /
+    /// msg.ack-read): the conversation's outgoing receipt lines are stale.
+    case receiptsUpdated(conversation: String)
     /// The signaling connection lifecycle for the UI banners
     /// (offline/reconnecting, spec 4.7): `false` on .disconnected, `true`
     /// again on .connected.
@@ -160,6 +163,7 @@ public actor MessagingService {
             return
         }
         await apply(body.conversation, body.uptoSeq)
+        eventsContinuation.yield(.receiptsUpdated(conversation: body.conversation))
     }
 
     private func handleStored(_ envelope: LKEnvelope) async {

@@ -1079,5 +1079,15 @@ let project = Project(
             buildAction: .buildAction(targets: ["LinkoMacTests"]),
             testAction: .targets(["LinkoMacTests"])
         ),
+        // The app build schemes (e2e rehearsal + future CI): explicit
+        // schemes so the app targets are buildable without a test host.
+        .scheme(
+            name: "LinkoiOS",
+            buildAction: .buildAction(targets: ["LinkoiOS"])
+        ),
+        .scheme(
+            name: "LinkoMac",
+            buildAction: .buildAction(targets: ["LinkoMac"])
+        ),
     ]
 )
