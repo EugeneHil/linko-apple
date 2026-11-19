@@ -86,4 +86,53 @@ final class TokenStoreTests: XCTestCase {
             XCTAssertFalse(body.contains("SECRET-TOKEN-VALUE"), "write \(write.key) leaked the token")
         }
     }
+
+    // MARK: - Device id persistence (part 2 / LNK-39; Task 14 coverage backfill)
+
+    func test_device_id_roundtrip_through_defaults() {
+        let defaults = DefaultsWritingFake()
+        let store = SessionConfigStore(defaults: defaults)
+
+        store.persistDeviceId(42)
+        XCTAssertEqual(store.loadDeviceId(), "42", "the decimal device id rides as its string form")
+        XCTAssertTrue(
+            defaults.writes.contains { $0.key == SessionConfigStore.deviceIdKey },
+            "the device id lives under its own defaults key"
+        )
+    }
+
+    func test_load_device_id_missing_is_nil() {
+        let store = SessionConfigStore(defaults: DefaultsWritingFake())
+
+        XCTAssertNil(store.loadDeviceId(), "fail-soft: the app stays on onboarding without one")
+    }
+
+    func test_load_device_id_survives_config_writes() {
+        let defaults = DefaultsWritingFake()
+        let store = SessionConfigStore(defaults: defaults)
+        let config = SessionConfig(
+            host: "server.example", port: 8443, pin: "a+b/c=", username: "alice"
+        )
+
+        XCTAssertNoThrow(try store.persist(config))
+        store.persistDeviceId(7)
+        XCTAssertEqual(store.loadDeviceId(), "7", "the config blob and the device id are separate keys")
+    }
+
+    // MARK: - UserDefaultsWriter round-trip (Task 14 coverage backfill)
+
+    func test_user_defaults_writer_roundtrip() throws {
+        let suiteName = "io.github.eugenehil.linko.tests.user-defaults-writer"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let writer = UserDefaultsWriter(defaults: defaults)
+        let payload = Data("non-secret-config".utf8)
+        let key = "io.github.eugenehil.linko.tests.writer-key"
+
+        XCTAssertNil(writer.data(forKey: key))
+        writer.setData(payload, forKey: key)
+        XCTAssertEqual(writer.data(forKey: key), payload)
+        writer.removeObject(forKey: key)
+        XCTAssertNil(writer.data(forKey: key))
+    }
 }

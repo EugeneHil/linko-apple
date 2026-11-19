@@ -14,14 +14,17 @@ import XCTest
 final class TransportFake: HTTPTransport, @unchecked Sendable {
     private let lock = NSLock()
     private let responder: @Sendable (URLRequest) -> (status: Int, body: Data)
+    private let headers: [String: String]
     private var recorded: [URLRequest] = []
 
-    init(status: Int, body: Data = Data()) {
+    init(status: Int, body: Data = Data(), headers: [String: String] = [:]) {
         responder = { _ in (status, body) }
+        self.headers = headers
     }
 
     init(responder: @escaping @Sendable (URLRequest) -> (status: Int, body: Data)) {
         self.responder = responder
+        headers = [:]
     }
 
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
@@ -34,7 +37,7 @@ final class TransportFake: HTTPTransport, @unchecked Sendable {
             url: responseURL,
             statusCode: answer.status,
             httpVersion: "HTTP/1.1",
-            headerFields: nil
+            headerFields: headers.isEmpty ? nil : headers
         ) else {
             throw APIError.malformedResponse
         }

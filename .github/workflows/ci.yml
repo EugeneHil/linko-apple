@@ -1,0 +1,124 @@
+# CI for linko-apple (Plan 4 Task 14, LNK-40): reuses the hardened
+# Scripts/ci-local.sh battery — every test invocation fails loudly on the
+# hollow gate ("no tests to run" or a missing "Executed N tests" summary,
+# the November 2026 PR-#24 incident), the design-token freshness check runs
+# before anything expensive, and the 80 % logic line-coverage gate (spec 7)
+# gates the shared Swift modules. The macOS jobs run only on pull requests
+# to develop/main (Actions minutes budget, spec §8); there is deliberately
+# no push-to-develop run — a coverage-trend job would double every macOS
+# build for little signal in v0.1, so the PR gate is the single source of
+# truth and the trend job can be revisited when the budget allows. The
+# gitleaks workflow is separate and stays untouched.
+name: ci
+
+on:
+  pull_request:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 90
+    env:
+      # The runner holds no "Mac Development" identity for the Personal Team
+      # pinned in Project.swift; the macOS test builds run unsigned (see
+      # Scripts/ci-local.sh run_macos_suite).
+      MACOS_SIGNING: CODE_SIGNING_ALLOWED=NO
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+      - name: Install mise and the pinned toolchain (Tuist 4.212.0 via .mise.toml)
+        run: |
+          curl -sSf https://mise.run | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Cache SwiftPM artifacts (the WebRTC xcframework download)
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/swifterpm
+          key: swifterpm-${{ runner.os }}-${{ hashFiles('Tuist/Package.swift', 'Tuist/Package.resolved') }}
+      - name: Full test battery (iOS simulator + macOS, hollow-gate hardened)
+        run: Scripts/ci-local.sh --no-lint
+      - name: Upload the Tuist module graph (e2e checklist item 10)
+        run: |
+          # dot needs no graphviz brew dependency (the png export pulled one
+          # in and its version drift broke the write); tuist requires the
+          # output directory to exist and writes graph.dot into it.
+          mkdir -p "$RUNNER_TEMP/tuist-graph"
+          mise exec -- tuist graph --format dot --no-open -o "$RUNNER_TEMP/tuist-graph"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: tuist-graph
+          path: ${{ runner.temp }}/tuist-graph
+
+  coverage:
+    runs-on: macos-latest
+    timeout-minutes: 90
+    env:
+      # Same no-signature rule as the macos job (only iOS simulator suites
+      # run here, the setting just keeps any incidental macOS build unsigned).
+      MACOS_SIGNING: CODE_SIGNING_ALLOWED=NO
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+      - name: Install mise and the pinned toolchain (Tuist 4.212.0 via .mise.toml)
+        run: |
+          curl -sSf https://mise.run | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Cache SwiftPM artifacts (the WebRTC xcframework download)
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/swifterpm
+          key: swifterpm-${{ runner.os }}-${{ hashFiles('Tuist/Package.swift', 'Tuist/Package.resolved') }}
+      - name: Coverage-enabled logic run with the 80 % gate
+        run: COVERAGE_DIR="$RUNNER_TEMP/coverage" Scripts/ci-local.sh --coverage
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always() # the table is the point when the gate fails
+        with:
+          name: coverage-report
+          path: ${{ runner.temp }}/coverage/coverage-report.txt
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+      - name: Install pinned SwiftFormat 0.64.0 (checksum-verified Linux binary)
+        run: |
+          curl -sSfLo swiftformat.zip https://github.com/nicklockwood/SwiftFormat/releases/download/0.64.0/swiftformat_linux.zip
+          echo "599eb5d2d8cf43e1128e79cd72f3bc2fec1b3189c3ac7593fbe732f2568fed36  swiftformat.zip" | sha256sum --check --strict
+          unzip -o swiftformat.zip -d swiftformat-bin
+          # The release zip names the binary after the archive (swiftformat_linux).
+          install -v "$(find swiftformat-bin -type f -name 'swiftformat_linux')" /usr/local/bin/swiftformat
+      - name: Install pinned SwiftLint 0.65.1 (checksum-verified Linux binary)
+        run: |
+          curl -sSfLo swiftlint.zip https://github.com/realm/SwiftLint/releases/download/0.65.1/swiftlint_linux_amd64.zip
+          echo "caeed6f4a679c35539ffaf124f6c4ab4a8416917f7d8796279dc52b74026059d  swiftlint.zip" | sha256sum --check --strict
+          unzip -o swiftlint.zip -d swiftlint-bin
+          # Install the static build: the launcher needs libxml2.so.2, which
+          # the ubuntu runner does not ship (round-4 incident).
+          install -v "$(find swiftlint-bin -type f -name 'swiftlint-static')" /usr/local/bin/swiftlint
+      - name: SwiftFormat --lint
+        run: swiftformat --lint .
+      - name: SwiftLint --strict
+        run: swiftlint --strict
+
+  tokens:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+      - name: Design-token freshness (external/linko-core generator --check)
+        run: Scripts/check-tokens.sh
