@@ -1,6 +1,7 @@
 // ConversationView (Plan 4 Task 12): the thin conversation — DesignSystem
 // MessageBubble / FileBubble / ReceiptLabel rows, a send bar and the
-// offline banner. All state lives in ConversationViewModel; the view only
+// offline banner, scrolled to the newest message (the rehearsal's 6th
+// finding). All state lives in ConversationViewModel; the view only
 // maps it.
 
 import DesignSystem
@@ -9,34 +10,52 @@ import SwiftUI
 
 public struct ConversationView: View {
     @State private var viewModel: ConversationViewModel
+    /// The newest row the view scrolled to. Rows are rebuilt on EVERY
+    /// messaging event (receipt label flips included) — scrolling on each
+    /// rebuild would yank the reader away from history; only a NEW newest
+    /// row (a message just sent or delivered) scrolls.
+    @State private var lastScrolledRowID: String?
 
     public init(viewModel: ConversationViewModel) {
         _viewModel = State(initialValue: viewModel)
     }
 
     public var body: some View {
-        VStack(spacing: LKTokens.Spacing.s8) {
-            if viewModel.showOfflineBanner {
-                Banner(message: "Offline — messages send when you are back")
-            }
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: LKTokens.Spacing.s12) {
-                    ForEach(viewModel.rows) { row in
-                        rowView(row)
-                    }
+        ScrollViewReader { proxy in
+            VStack(spacing: LKTokens.Spacing.s8) {
+                if viewModel.showOfflineBanner {
+                    Banner(message: "Offline — messages send when you are back")
                 }
-                .padding(LKTokens.Spacing.s16)
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: LKTokens.Spacing.s12) {
+                        ForEach(viewModel.rows) { row in
+                            rowView(row)
+                                .id(row.id)
+                        }
+                    }
+                    .padding(LKTokens.Spacing.s16)
+                }
+                sendBar
             }
-            sendBar
+            .task {
+                viewModel.start()
+                await viewModel.refresh()
+                await viewModel.markOpened()
+                scrollToNewest(rows: viewModel.rows, proxy: proxy)
+            }
+            .onChange(of: viewModel.rows) { _, rows in
+                scrollToNewest(rows: rows, proxy: proxy)
+            }
+            .onDisappear {
+                viewModel.stop()
+            }
         }
-        .task {
-            viewModel.start()
-            await viewModel.refresh()
-            await viewModel.markOpened()
-        }
-        .onDisappear {
-            viewModel.stop()
-        }
+    }
+
+    private func scrollToNewest(rows: [ConversationRow], proxy: ScrollViewProxy) {
+        guard let lastID = rows.last?.id, lastID != lastScrolledRowID else { return }
+        lastScrolledRowID = lastID
+        proxy.scrollTo(lastID, anchor: .bottom)
     }
 
     private var sendBar: some View {
