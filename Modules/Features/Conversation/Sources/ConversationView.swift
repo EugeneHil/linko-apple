@@ -27,7 +27,12 @@ public struct ConversationView: View {
                     Banner(message: "Offline — messages send when you are back")
                 }
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: LKTokens.Spacing.s12) {
+                    // A plain VStack, NOT LazyVStack: scrollTo cannot reach
+                    // rows the lazy layout has not rendered (it misses
+                    // silently — the rehearsal's 6th finding's first fix
+                    // did exactly that). v0.1 histories are small; revisit
+                    // laziness only if they grow.
+                    VStack(alignment: .leading, spacing: LKTokens.Spacing.s12) {
                         ForEach(viewModel.rows) { row in
                             rowView(row)
                                 .id(row.id)
@@ -35,6 +40,9 @@ public struct ConversationView: View {
                     }
                     .padding(LKTokens.Spacing.s16)
                 }
+                // Open at the newest message even before the first
+                // programmatic scroll lands.
+                .defaultScrollAnchor(.bottom)
                 sendBar
             }
             .task {
@@ -55,7 +63,12 @@ public struct ConversationView: View {
     private func scrollToNewest(rows: [ConversationRow], proxy: ScrollViewProxy) {
         guard let lastID = rows.last?.id, lastID != lastScrolledRowID else { return }
         lastScrolledRowID = lastID
-        proxy.scrollTo(lastID, anchor: .bottom)
+        // The scroll must run AFTER the new row's layout pass: calling it
+        // inside the same transaction as the rows change reads a frame
+        // that does not exist yet and silently no-ops.
+        DispatchQueue.main.async {
+            proxy.scrollTo(lastID, anchor: .bottom)
+        }
     }
 
     private var sendBar: some View {
