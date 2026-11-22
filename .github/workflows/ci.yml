@@ -53,7 +53,7 @@ jobs:
           # output directory to exist and writes graph.dot into it.
           mkdir -p "$RUNNER_TEMP/tuist-graph"
           mise exec -- tuist graph --format dot --no-open -o "$RUNNER_TEMP/tuist-graph"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: tuist-graph
           path: ${{ runner.temp }}/tuist-graph
@@ -80,7 +80,7 @@ jobs:
           key: swifterpm-${{ runner.os }}-${{ hashFiles('Tuist/Package.swift', 'Tuist/Package.resolved') }}
       - name: Coverage-enabled logic run with the 80 % gate
         run: COVERAGE_DIR="$RUNNER_TEMP/coverage" Scripts/ci-local.sh --coverage
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always() # the table is the point when the gate fails
         with:
           name: coverage-report
